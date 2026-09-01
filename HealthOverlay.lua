@@ -1,7 +1,7 @@
 --// =========================================================
 --// GAKURAN - HEALTH OVERLAY
 --// GitHub / Matcha Version
---// Polling-Safe Edition
+--// POLLING SAFE
 --// =========================================================
 
 local Players = game:GetService("Players")
@@ -36,6 +36,7 @@ end
 
 function HealthOverlay:Initialize(state)
     self.SharedState = state
+
     print("[HealthOverlay] Initialized.")
 end
 
@@ -68,6 +69,7 @@ function HealthOverlay:Create(player)
 
     self:Remove(player)
 
+
     local billboard = Instance.new("BillboardGui")
 
     billboard.Name = "GakuranHealth"
@@ -76,6 +78,7 @@ function HealthOverlay:Create(player)
     billboard.StudsOffset = Vector3.new(0, 3, 0)
     billboard.AlwaysOnTop = true
     billboard.ResetOnSpawn = false
+
     billboard.Parent = head
 
 
@@ -87,6 +90,7 @@ function HealthOverlay:Create(player)
     background.Size = UDim2.new(1, 0, 0, 8)
     background.Position = UDim2.new(0, 0, 0, 0)
     background.BorderSizePixel = 0
+
     background.Parent = billboard
 
 
@@ -98,6 +102,7 @@ function HealthOverlay:Create(player)
     healthBar.Size = UDim2.new(1, 0, 1, 0)
     healthBar.Position = UDim2.new(0, 0, 0, 0)
     healthBar.BorderSizePixel = 0
+
     healthBar.Parent = background
 
 
@@ -108,11 +113,14 @@ function HealthOverlay:Create(player)
     text.Name = "HealthText"
     text.Size = UDim2.new(1, 0, 0, 20)
     text.Position = UDim2.new(0, 0, 0, 10)
+
     text.BackgroundTransparency = 1
+
     text.Text = "100 / 100"
     text.TextSize = 12
     text.Font = Enum.Font.GothamBold
     text.TextStrokeTransparency = 0.5
+
     text.Parent = billboard
 
 
@@ -320,7 +328,9 @@ function HealthOverlay:Poll()
         return
     end
 
-    self:Refresh()
+    pcall(function()
+        self:Refresh()
+    end)
 end
 
 
@@ -370,9 +380,7 @@ function HealthOverlay:Start()
 
         while self.State.Running do
 
-            pcall(function()
-                self:Poll()
-            end)
+            self:Poll()
 
             task.wait(self.PollInterval)
 
