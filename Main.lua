@@ -35,12 +35,6 @@ print("[Main] Loading modules...")
 print("")
 
 --// =========================================================
---// SAFE MODULE RESULT STORAGE
---// =========================================================
-
-_G.__GakuranModuleResult = nil
-
---// =========================================================
 --// LOAD MODULE
 --// =========================================================
 
@@ -76,10 +70,20 @@ local function LoadModule(moduleName)
         return nil
     end
 
-    if type(source) ~= "string" or source == "" then
+    if type(source) ~= "string" then
 
         warn(
-            "[Main] Empty or invalid source: " ..
+            "[Main] Invalid source type for " ..
+            moduleName
+        )
+
+        return nil
+    end
+
+    if source == "" then
+
+        warn(
+            "[Main] Empty source for " ..
             moduleName
         )
 
@@ -102,11 +106,22 @@ local function LoadModule(moduleName)
 
     if source == "404: Not Found"
         or source:find("^404")
-        or source:find("Not Found")
     then
 
         warn(
             "[Main] GitHub returned 404 for " ..
+            moduleName
+        )
+
+        return nil
+    end
+
+    if source:find("^403")
+        or source:find("403: Forbidden")
+    then
+
+        warn(
+            "[Main] GitHub returned 403 for " ..
             moduleName
         )
 
@@ -123,114 +138,82 @@ local function LoadModule(moduleName)
     --// RETURN HANDLING
     --// -----------------------------------------------------
     --
-    --// Supported module endings:
+    --// Supported:
     --
-    --// 1:
-    --// return ModuleName
-    --
-    --// 2:
     --// _G.__GakuranModuleResult = ModuleName
     --
-    --// The source is converted to global-result form
-    --// before execution because Matcha does not reliably
-    --// expose the value returned by loadstring().
+    --// OR:
+    --
+    --// return ModuleName
+    --
+    --// We intentionally DO NOT attempt to guess
+    --// local variables because the downloaded chunk
+    --// cannot safely access locals from this loader.
     --// -----------------------------------------------------
 
     local modifiedSource = source
-
-    --// -----------------------------------------------------
-    --// CHECK FOR EXISTING MATCHA RESULT
-    --// -----------------------------------------------------
 
     local hasGlobalResult =
         source:find(
             "_G%.__GakuranModuleResult%s*="
         ) ~= nil
 
-    --// -----------------------------------------------------
-    --// CHECK FOR FINAL RETURN
-    --// -----------------------------------------------------
-
-    local finalReturnPattern =
-        "return%s+" ..
-        moduleName ..
-        "%s*;?%s*$"
-
-    local returnStart =
-        source:match(
-            "()%s*return%s+" ..
-            moduleName ..
-            "%s*;?%s*$"
-        )
-
-    if returnStart then
-
-        --// Replace only the final return statement.
-        modifiedSource =
-            source:gsub(
-                "return%s+" ..
-                moduleName ..
-                "%s*;?%s*$",
-                "_G.__GakuranModuleResult = " ..
-                moduleName,
-                1
-            )
+    if hasGlobalResult then
 
         print(
-            "[Main] Converted final return for " ..
-            moduleName
-        )
-
-    elseif hasGlobalResult then
-
-        --// Module already handles its own result.
-
-        print(
-            "[Main] Module already uses Matcha result: " ..
+            "[Main] Matcha result already present: " ..
             moduleName
         )
 
     else
 
-        --// -------------------------------------------------
-        --// FALLBACK
-        --// -------------------------------------------------
-        --
-        --// Some modules may have:
-        --
-        --// local ModuleName = {}
-        --
-        --// but no return statement.
-        --
-        --// We do not guess blindly.
-        --// Instead, try to append a result assignment
-        --// only when the expected module variable exists.
-        --
-        --// This check is performed after compilation,
-        --// so syntax remains untouched here.
-
-        print(
-            "[Main] No explicit module return found for " ..
-            moduleName
-        )
-
-        --// Safely append the expected result assignment.
-        modifiedSource =
-            source ..
-            "\n\n" ..
-            "--// Gakuran Matcha fallback result\n" ..
-            "if type(" ..
+        local returnPattern =
+            "return%s+" ..
             moduleName ..
-            ") == \"table\" then\n" ..
-            "    _G.__GakuranModuleResult = " ..
-            moduleName ..
-            "\n" ..
-            "end\n"
+            "%s*;?%s*$"
 
-        print(
-            "[Main] Added safe result fallback for " ..
-            moduleName
-        )
+        local convertedSource,
+              replacementCount =
+            source:gsub(
+                returnPattern,
+                "_G.__GakuranModuleResult = " ..
+                moduleName,
+                1
+            )
+
+        if replacementCount > 0 then
+
+            modifiedSource =
+                convertedSource
+
+            print(
+                "[Main] Converted return statement: " ..
+                moduleName
+            )
+
+        else
+
+            warn(
+                "[Main] No supported module result found: " ..
+                moduleName
+            )
+
+            warn(
+                "[Main] Expected either:"
+            )
+
+            warn(
+                "[Main] _G.__GakuranModuleResult = " ..
+                moduleName
+            )
+
+            warn(
+                "[Main] or: return " ..
+                moduleName
+            )
+
+            return nil
+        end
     end
 
     --// -----------------------------------------------------
@@ -242,7 +225,8 @@ local function LoadModule(moduleName)
         moduleName
     )
 
-    local compileSuccess, chunk =
+    local compileSuccess,
+          chunk =
         pcall(
             loadstring,
             modifiedSource
@@ -255,7 +239,9 @@ local function LoadModule(moduleName)
             moduleName
         )
 
-        warn(tostring(chunk))
+        warn(
+            tostring(chunk)
+        )
 
         return nil
     end
@@ -268,7 +254,7 @@ local function LoadModule(moduleName)
         )
 
         warn(
-            "[Main] Compiler result type: " ..
+            "[Main] Result type: " ..
             tostring(type(chunk))
         )
 
@@ -289,7 +275,8 @@ local function LoadModule(moduleName)
         moduleName
     )
 
-    local executeSuccess, executeResult =
+    local executeSuccess,
+          executeResult =
         pcall(chunk)
 
     if not executeSuccess then
@@ -309,13 +296,12 @@ local function LoadModule(moduleName)
     end
 
     --// -----------------------------------------------------
-    --// READ MODULE RESULT
+    --// READ RESULT
     --// -----------------------------------------------------
 
     local result =
         _G.__GakuranModuleResult
 
-    --// Clear global immediately after reading.
     _G.__GakuranModuleResult = nil
 
     print(
@@ -329,7 +315,7 @@ local function LoadModule(moduleName)
     )
 
     --// -----------------------------------------------------
-    --// VALIDATE RESULT
+    --// VALIDATE
     --// -----------------------------------------------------
 
     if result == nil then
@@ -338,11 +324,6 @@ local function LoadModule(moduleName)
             "[Main] " ..
             moduleName ..
             ".lua produced no module result."
-        )
-
-        warn(
-            "[Main] Expected a table named " ..
-            moduleName
         )
 
         return nil
@@ -385,10 +366,7 @@ local Config =
     LoadModule("Config")
 
 if not Config then
-
-    error(
-        "[Main] Config failed to load."
-    )
+    error("[Main] Config failed to load.")
 end
 
 print(
@@ -404,10 +382,7 @@ local AnimationDatabase =
     LoadModule("AnimationDatabase")
 
 if not AnimationDatabase then
-
-    error(
-        "[Main] AnimationDatabase failed to load."
-    )
+    error("[Main] AnimationDatabase failed to load.")
 end
 
 print(
@@ -418,7 +393,8 @@ print(
 print("")
 print("[Main] Initializing AnimationDatabase...")
 
-local success, err =
+local databaseSuccess,
+      databaseError =
     pcall(function()
 
         if type(AnimationDatabase.SetConfig) ==
@@ -440,11 +416,11 @@ local success, err =
         end
     end)
 
-if not success then
+if not databaseSuccess then
 
     error(
         "[Main] AnimationDatabase initialization failed: " ..
-        tostring(err)
+        tostring(databaseError)
     )
 end
 
@@ -460,10 +436,7 @@ local AnimationTracker =
     LoadModule("AnimationTracker")
 
 if not AnimationTracker then
-
-    error(
-        "[Main] AnimationTracker failed to load."
-    )
+    error("[Main] AnimationTracker failed to load.")
 end
 
 if type(AnimationTracker.SetDependencies) ==
@@ -488,10 +461,7 @@ local TargetManager =
     LoadModule("TargetManager")
 
 if not TargetManager then
-
-    error(
-        "[Main] TargetManager failed to load."
-    )
+    error("[Main] TargetManager failed to load.")
 end
 
 if type(TargetManager.SetConfig) ==
@@ -515,10 +485,7 @@ local ParryController =
     LoadModule("ParryController")
 
 if not ParryController then
-
-    error(
-        "[Main] ParryController failed to load."
-    )
+    error("[Main] ParryController failed to load.")
 end
 
 if type(ParryController.SetDependencies) ==
@@ -545,10 +512,7 @@ local Logger =
     LoadModule("Logger")
 
 if not Logger then
-
-    error(
-        "[Main] Logger failed to load."
-    )
+    error("[Main] Logger failed to load.")
 end
 
 if type(Logger.SetDependencies) ==
@@ -574,10 +538,7 @@ local ESP =
     LoadModule("ESP")
 
 if not ESP then
-
-    error(
-        "[Main] ESP failed to load."
-    )
+    error("[Main] ESP failed to load.")
 end
 
 if type(ESP.SetDependencies) ==
@@ -602,10 +563,7 @@ local HealthOverlay =
     LoadModule("HealthOverlay")
 
 if not HealthOverlay then
-
-    error(
-        "[Main] HealthOverlay failed to load."
-    )
+    error("[Main] HealthOverlay failed to load.")
 end
 
 if type(HealthOverlay.SetDependencies) ==
@@ -630,10 +588,7 @@ local AutoPlay =
     LoadModule("AutoPlay")
 
 if not AutoPlay then
-
-    error(
-        "[Main] AutoPlay failed to load."
-    )
+    error("[Main] AutoPlay failed to load.")
 end
 
 if type(AutoPlay.SetDependencies) ==
@@ -659,10 +614,7 @@ local UI =
     LoadModule("UI")
 
 if not UI then
-
-    error(
-        "[Main] UI failed to load."
-    )
+    error("[Main] UI failed to load.")
 end
 
 if type(UI.SetDependencies) ==
@@ -720,7 +672,8 @@ local function SafeInitialize(
         return true
     end
 
-    local ok, initializeError =
+    local ok,
+          initializeError =
         pcall(function()
 
             module:Initialize()
@@ -819,7 +772,8 @@ local function SafeStart(
         return true
     end
 
-    local ok, startError =
+    local ok,
+          startError =
         pcall(function()
 
             module:Start()
@@ -885,19 +839,15 @@ SafeStart(
 )
 
 --// =========================================================
---// INPUT
+--// MATCHA COMPATIBILITY
 --// =========================================================
 
 print(
-    "[Main] Input event connections skipped for Matcha compatibility."
+    "[Main] Main-level input connections skipped."
 )
 
---// =========================================================
---// CHARACTER
---// =========================================================
-
 print(
-    "[Main] Character event connections skipped."
+    "[Main] Main-level character connections skipped."
 )
 
 --// =========================================================
