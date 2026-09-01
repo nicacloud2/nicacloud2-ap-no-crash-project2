@@ -63,6 +63,7 @@ local State = {
 --==================================================
 
 local function Initialize()
+    Logger:Initialize(Config)
     Logger:Info("Starting Gakuran Script...")
 
     -- Load configuration
