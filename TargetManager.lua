@@ -1,4 +1,4 @@
-```lua
+
 --// =========================================================
 --// GAKURAN - TARGET MANAGER
 --// GitHub / Matcha Version
@@ -492,4 +492,3 @@ end
 
 _G.__GakuranModuleResult =
     TargetManager
-```
