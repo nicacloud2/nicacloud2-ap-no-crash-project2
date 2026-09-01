@@ -2,6 +2,7 @@
 --// =========================================================
 --// GAKURAN SYSTEM - MAIN LOADER
 --// GitHub + Matcha Compatible
+--// Safe Module Return Handling
 --// Polling-Safe Edition
 --// =========================================================
 
@@ -34,6 +35,12 @@ print("[Main] Loading modules...")
 print("")
 
 --// =========================================================
+--// SAFE MODULE RESULT STORAGE
+--// =========================================================
+
+_G.__GakuranModuleResult = nil
+
+--// =========================================================
 --// LOAD MODULE
 --// =========================================================
 
@@ -52,24 +59,27 @@ local function LoadModule(moduleName)
     --// DOWNLOAD
     --// -----------------------------------------------------
 
-    local success, source =
+    local downloadSuccess, source =
         pcall(function()
             return game:HttpGet(url)
         end)
 
-    if not success then
+    if not downloadSuccess then
+
         warn(
             "[Main] Failed to download " ..
             moduleName
         )
 
         warn(tostring(source))
+
         return nil
     end
 
-    if not source or source == "" then
+    if type(source) ~= "string" or source == "" then
+
         warn(
-            "[Main] Empty source: " ..
+            "[Main] Empty or invalid source: " ..
             moduleName
         )
 
@@ -104,85 +114,123 @@ local function LoadModule(moduleName)
     end
 
     --// -----------------------------------------------------
-    --// CLEAR OLD RESULT
+    --// CLEAR PREVIOUS RESULT
     --// -----------------------------------------------------
 
     _G.__GakuranModuleResult = nil
 
     --// -----------------------------------------------------
-    --// MATCHA MODULE RETURN CONVERSION
+    --// RETURN HANDLING
     --// -----------------------------------------------------
-
-    --// Supports both:
     --
+    --// Supported module endings:
+    --
+    --// 1:
     --// return ModuleName
     --
-    --// and:
-    --
+    --// 2:
     --// _G.__GakuranModuleResult = ModuleName
+    --
+    --// The source is converted to global-result form
+    --// before execution because Matcha does not reliably
+    --// expose the value returned by loadstring().
+    --// -----------------------------------------------------
 
-    local returnPattern =
+    local modifiedSource = source
+
+    --// -----------------------------------------------------
+    --// CHECK FOR EXISTING MATCHA RESULT
+    --// -----------------------------------------------------
+
+    local hasGlobalResult =
+        source:find(
+            "_G%.__GakuranModuleResult%s*="
+        ) ~= nil
+
+    --// -----------------------------------------------------
+    --// CHECK FOR FINAL RETURN
+    --// -----------------------------------------------------
+
+    local finalReturnPattern =
         "return%s+" ..
         moduleName ..
-        "%s*$"
+        "%s*;?%s*$"
 
-    local replacement =
-        "_G.__GakuranModuleResult = " ..
-        moduleName
-
-    local modifiedSource, replacementCount =
-        source:gsub(
-            returnPattern,
-            replacement,
-            1
+    local returnStart =
+        source:match(
+            "()%s*return%s+" ..
+            moduleName ..
+            "%s*;?%s*$"
         )
 
-    if replacementCount > 0 then
+    if returnStart then
+
+        --// Replace only the final return statement.
+        modifiedSource =
+            source:gsub(
+                "return%s+" ..
+                moduleName ..
+                "%s*;?%s*$",
+                "_G.__GakuranModuleResult = " ..
+                moduleName,
+                1
+            )
 
         print(
-            "[Main] Converted return statement for " ..
+            "[Main] Converted final return for " ..
+            moduleName
+        )
+
+    elseif hasGlobalResult then
+
+        --// Module already handles its own result.
+
+        print(
+            "[Main] Module already uses Matcha result: " ..
             moduleName
         )
 
     else
 
-        --// Already Matcha-compatible?
+        --// -------------------------------------------------
+        --// FALLBACK
+        --// -------------------------------------------------
+        --
+        --// Some modules may have:
+        --
+        --// local ModuleName = {}
+        --
+        --// but no return statement.
+        --
+        --// We do not guess blindly.
+        --// Instead, try to append a result assignment
+        --// only when the expected module variable exists.
+        --
+        --// This check is performed after compilation,
+        --// so syntax remains untouched here.
 
-        if source:match(
-            "_G%.__GakuranModuleResult%s*="
-        ) then
+        print(
+            "[Main] No explicit module return found for " ..
+            moduleName
+        )
 
-            print(
-                "[Main] " ..
-                moduleName ..
-                " already uses Matcha module result."
-            )
+        --// Safely append the expected result assignment.
+        modifiedSource =
+            source ..
+            "\n\n" ..
+            "--// Gakuran Matcha fallback result\n" ..
+            "if type(" ..
+            moduleName ..
+            ") == \"table\" then\n" ..
+            "    _G.__GakuranModuleResult = " ..
+            moduleName ..
+            "\n" ..
+            "end\n"
 
-            modifiedSource = source
-
-        else
-
-            warn(
-                "[Main] No module return found for " ..
-                moduleName
-            )
-
-            warn(
-                "[Main] Expected either:"
-            )
-
-            warn(
-                "        return " ..
-                moduleName
-            )
-
-            warn(
-                "        OR _G.__GakuranModuleResult = " ..
-                moduleName
-            )
-
-            return nil
-        end
+        print(
+            "[Main] Added safe result fallback for " ..
+            moduleName
+        )
     end
 
     --// -----------------------------------------------------
@@ -200,14 +248,30 @@ local function LoadModule(moduleName)
             modifiedSource
         )
 
-    if not compileSuccess or not chunk then
+    if not compileSuccess then
 
         warn(
-            "[Main] Compilation failed: " ..
+            "[Main] Compilation call failed: " ..
             moduleName
         )
 
         warn(tostring(chunk))
+
+        return nil
+    end
+
+    if type(chunk) ~= "function" then
+
+        warn(
+            "[Main] Compiler returned invalid chunk: " ..
+            moduleName
+        )
+
+        warn(
+            "[Main] Compiler result type: " ..
+            tostring(type(chunk))
+        )
+
         return nil
     end
 
@@ -245,12 +309,13 @@ local function LoadModule(moduleName)
     end
 
     --// -----------------------------------------------------
-    --// GET MODULE RESULT
+    --// READ MODULE RESULT
     --// -----------------------------------------------------
 
     local result =
         _G.__GakuranModuleResult
 
+    --// Clear global immediately after reading.
     _G.__GakuranModuleResult = nil
 
     print(
@@ -263,12 +328,21 @@ local function LoadModule(moduleName)
         tostring(type(result))
     )
 
+    --// -----------------------------------------------------
+    --// VALIDATE RESULT
+    --// -----------------------------------------------------
+
     if result == nil then
 
         warn(
             "[Main] " ..
             moduleName ..
-            ".lua returned NIL."
+            ".lua produced no module result."
+        )
+
+        warn(
+            "[Main] Expected a table named " ..
+            moduleName
         )
 
         return nil
@@ -279,12 +353,16 @@ local function LoadModule(moduleName)
         warn(
             "[Main] " ..
             moduleName ..
-            " returned " ..
+            " produced invalid result type: " ..
             tostring(type(result))
         )
 
         return nil
     end
+
+    --// -----------------------------------------------------
+    --// CACHE
+    --// -----------------------------------------------------
 
     LoadedModules[moduleName] =
         result
@@ -307,6 +385,7 @@ local Config =
     LoadModule("Config")
 
 if not Config then
+
     error(
         "[Main] Config failed to load."
     )
@@ -325,6 +404,7 @@ local AnimationDatabase =
     LoadModule("AnimationDatabase")
 
 if not AnimationDatabase then
+
     error(
         "[Main] AnimationDatabase failed to load."
     )
