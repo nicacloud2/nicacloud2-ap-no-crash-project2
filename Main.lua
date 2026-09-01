@@ -1,11 +1,3 @@
-
---// =========================================================
---// GAKURAN SYSTEM - MAIN LOADER
---// GitHub + Matcha Compatible
---// Safe Module Return Handling
---// Polling-Safe Edition
---// =========================================================
-
 local BASE_URL =
     "https://raw.githubusercontent.com/nicacloud2/nicacloud2-ap-no-crash-project2/main/"
 
@@ -24,19 +16,11 @@ local MODULES = {
 
 local LoadedModules = {}
 
---// =========================================================
---// HEADER
---// =========================================================
-
 print("========================================")
 print("          GAKURAN SYSTEM")
 print("========================================")
 print("[Main] Loading modules...")
 print("")
-
---// =========================================================
---// LOAD MODULE
---// =========================================================
 
 local function LoadModule(moduleName)
 
@@ -44,14 +28,9 @@ local function LoadModule(moduleName)
     print("----------------------------------------")
     print("[Main] Downloading: " .. moduleName)
 
-    local url =
-        BASE_URL .. moduleName .. ".lua"
+    local url = BASE_URL .. moduleName .. ".lua"
 
     print("[Main] URL: " .. url)
-
-    --// -----------------------------------------------------
-    --// DOWNLOAD
-    --// -----------------------------------------------------
 
     local downloadSuccess, source =
         pcall(function()
@@ -59,99 +38,69 @@ local function LoadModule(moduleName)
         end)
 
     if not downloadSuccess then
-
-        warn(
-            "[Main] Failed to download " ..
-            moduleName
-        )
-
+        warn("[Main] Failed to download " .. moduleName)
         warn(tostring(source))
-
         return nil
     end
 
     if type(source) ~= "string" then
-
-        warn(
-            "[Main] Invalid source type for " ..
-            moduleName
-        )
-
+        warn("[Main] Invalid source type for " .. moduleName)
         return nil
     end
 
     if source == "" then
-
-        warn(
-            "[Main] Empty source for " ..
-            moduleName
-        )
-
+        warn("[Main] Empty source for " .. moduleName)
         return nil
     end
 
-    print(
-        "[Main] Source length: " ..
-        tostring(#source)
-    )
+    print("[Main] Source length: " .. tostring(#source))
 
     print(
         "[Main] Source preview: " ..
         string.sub(source, 1, 120)
     )
 
-    --// -----------------------------------------------------
-    --// GITHUB ERROR DETECTION
-    --// -----------------------------------------------------
-
     if source == "404: Not Found"
         or source:find("^404")
     then
-
-        warn(
-            "[Main] GitHub returned 404 for " ..
-            moduleName
-        )
-
+        warn("[Main] GitHub returned 404 for " .. moduleName)
         return nil
     end
 
     if source:find("^403")
         or source:find("403: Forbidden")
     then
-
-        warn(
-            "[Main] GitHub returned 403 for " ..
-            moduleName
-        )
-
+        warn("[Main] GitHub returned 403 for " .. moduleName)
         return nil
     end
 
-    --// -----------------------------------------------------
-    --// CLEAR PREVIOUS RESULT
-    --// -----------------------------------------------------
-
     _G.__GakuranModuleResult = nil
 
-    --// -----------------------------------------------------
-    --// RETURN HANDLING
-    --// -----------------------------------------------------
-    --
-    --// Supported:
-    --
-    --// _G.__GakuranModuleResult = ModuleName
-    --
-    --// OR:
-    --
-    --// return ModuleName
-    --
-    --// We intentionally DO NOT attempt to guess
-    --// local variables because the downloaded chunk
-    --// cannot safely access locals from this loader.
-    --// -----------------------------------------------------
-
     local modifiedSource = source
+
+    --[[
+        Matcha sometimes reports:
+
+        Expected identifier when parsing expression, got '//'
+
+        if a downloaded source contains a bare // line.
+
+        Lua comments must begin with --.
+
+        Convert only lines that actually begin with //.
+    ]]
+
+    modifiedSource =
+        modifiedSource:gsub(
+            "([^\r\n])\n%s*//",
+            "%1\n--//"
+        )
+
+    modifiedSource =
+        modifiedSource:gsub(
+            "^\s*//",
+            "--//"
+        )
 
     local hasGlobalResult =
         source:find(
@@ -174,7 +123,7 @@ local function LoadModule(moduleName)
 
         local convertedSource,
               replacementCount =
-            source:gsub(
+            modifiedSource:gsub(
                 returnPattern,
                 "_G.__GakuranModuleResult = " ..
                 moduleName,
@@ -183,8 +132,7 @@ local function LoadModule(moduleName)
 
         if replacementCount > 0 then
 
-            modifiedSource =
-                convertedSource
+            modifiedSource = convertedSource
 
             print(
                 "[Main] Converted return statement: " ..
@@ -198,27 +146,9 @@ local function LoadModule(moduleName)
                 moduleName
             )
 
-            warn(
-                "[Main] Expected either:"
-            )
-
-            warn(
-                "[Main] _G.__GakuranModuleResult = " ..
-                moduleName
-            )
-
-            warn(
-                "[Main] or: return " ..
-                moduleName
-            )
-
             return nil
         end
     end
-
-    --// -----------------------------------------------------
-    --// COMPILE
-    --// -----------------------------------------------------
 
     print(
         "[Main] Compiling: " ..
@@ -235,13 +165,11 @@ local function LoadModule(moduleName)
     if not compileSuccess then
 
         warn(
-            "[Main] Compilation call failed: " ..
+            "[Main] Compilation failed: " ..
             moduleName
         )
 
-        warn(
-            tostring(chunk)
-        )
+        warn(tostring(chunk))
 
         return nil
     end
@@ -249,13 +177,8 @@ local function LoadModule(moduleName)
     if type(chunk) ~= "function" then
 
         warn(
-            "[Main] Compiler returned invalid chunk: " ..
+            "[Main] Invalid compiler result: " ..
             moduleName
-        )
-
-        warn(
-            "[Main] Result type: " ..
-            tostring(type(chunk))
         )
 
         return nil
@@ -265,10 +188,6 @@ local function LoadModule(moduleName)
         "[Main] Compilation successful: " ..
         moduleName
     )
-
-    --// -----------------------------------------------------
-    --// EXECUTE
-    --// -----------------------------------------------------
 
     print(
         "[Main] Executing: " ..
@@ -286,18 +205,12 @@ local function LoadModule(moduleName)
             moduleName
         )
 
-        warn(
-            tostring(executeResult)
-        )
+        warn(tostring(executeResult))
 
         _G.__GakuranModuleResult = nil
 
         return nil
     end
-
-    --// -----------------------------------------------------
-    --// READ RESULT
-    --// -----------------------------------------------------
 
     local result =
         _G.__GakuranModuleResult
@@ -314,10 +227,6 @@ local function LoadModule(moduleName)
         tostring(type(result))
     )
 
-    --// -----------------------------------------------------
-    --// VALIDATE
-    --// -----------------------------------------------------
-
     if result == nil then
 
         warn(
@@ -332,21 +241,16 @@ local function LoadModule(moduleName)
     if type(result) ~= "table" then
 
         warn(
-            "[Main] " ..
+            "[Main] Invalid result type for " ..
             moduleName ..
-            " produced invalid result type: " ..
+            ": " ..
             tostring(type(result))
         )
 
         return nil
     end
 
-    --// -----------------------------------------------------
-    --// CACHE
-    --// -----------------------------------------------------
-
-    LoadedModules[moduleName] =
-        result
+    LoadedModules[moduleName] = result
 
     print(
         "[Main] Loaded successfully: " ..
@@ -357,10 +261,6 @@ local function LoadModule(moduleName)
 
     return result
 end
-
---// =========================================================
---// CONFIG
---// =========================================================
 
 local Config =
     LoadModule("Config")
@@ -373,10 +273,6 @@ print(
     "[Main] Config check: " ..
     tostring(type(Config))
 )
-
---// =========================================================
---// ANIMATION DATABASE
---// =========================================================
 
 local AnimationDatabase =
     LoadModule("AnimationDatabase")
@@ -397,23 +293,14 @@ local databaseSuccess,
       databaseError =
     pcall(function()
 
-        if type(AnimationDatabase.SetConfig) ==
-            "function"
-        then
-
-            AnimationDatabase:SetConfig(
-                Config
-            )
+        if type(AnimationDatabase.SetConfig) == "function" then
+            AnimationDatabase:SetConfig(Config)
         end
 
-        if type(AnimationDatabase.Initialize) ==
-            "function"
-        then
-
-            AnimationDatabase:Initialize(
-                Config
-            )
+        if type(AnimationDatabase.Initialize) == "function" then
+            AnimationDatabase:Initialize(Config)
         end
+
     end)
 
 if not databaseSuccess then
@@ -422,15 +309,10 @@ if not databaseSuccess then
         "[Main] AnimationDatabase initialization failed: " ..
         tostring(databaseError)
     )
+
 end
 
-print(
-    "[Main] AnimationDatabase initialized."
-)
-
---// =========================================================
---// ANIMATION TRACKER
---// =========================================================
+print("[Main] AnimationDatabase initialized.")
 
 local AnimationTracker =
     LoadModule("AnimationTracker")
@@ -439,23 +321,14 @@ if not AnimationTracker then
     error("[Main] AnimationTracker failed to load.")
 end
 
-if type(AnimationTracker.SetDependencies) ==
-    "function"
-then
-
+if type(AnimationTracker.SetDependencies) == "function" then
     AnimationTracker:SetDependencies(
         Config,
         AnimationDatabase
     )
 end
 
-print(
-    "[Main] AnimationTracker dependencies set."
-)
-
---// =========================================================
---// TARGET MANAGER
---// =========================================================
+print("[Main] AnimationTracker dependencies set.")
 
 local TargetManager =
     LoadModule("TargetManager")
@@ -464,22 +337,11 @@ if not TargetManager then
     error("[Main] TargetManager failed to load.")
 end
 
-if type(TargetManager.SetConfig) ==
-    "function"
-then
-
-    TargetManager:SetConfig(
-        Config
-    )
+if type(TargetManager.SetConfig) == "function" then
+    TargetManager:SetConfig(Config)
 end
 
-print(
-    "[Main] TargetManager config set."
-)
-
---// =========================================================
---// PARRY CONTROLLER
---// =========================================================
+print("[Main] TargetManager config set.")
 
 local ParryController =
     LoadModule("ParryController")
@@ -488,10 +350,7 @@ if not ParryController then
     error("[Main] ParryController failed to load.")
 end
 
-if type(ParryController.SetDependencies) ==
-    "function"
-then
-
+if type(ParryController.SetDependencies) == "function" then
     ParryController:SetDependencies(
         Config,
         AnimationDatabase,
@@ -500,13 +359,7 @@ then
     )
 end
 
-print(
-    "[Main] ParryController dependencies set."
-)
-
---// =========================================================
---// LOGGER
---// =========================================================
+print("[Main] ParryController dependencies set.")
 
 local Logger =
     LoadModule("Logger")
@@ -515,10 +368,7 @@ if not Logger then
     error("[Main] Logger failed to load.")
 end
 
-if type(Logger.SetDependencies) ==
-    "function"
-then
-
+if type(Logger.SetDependencies) == "function" then
     Logger:SetDependencies(
         Config,
         AnimationDatabase,
@@ -526,13 +376,7 @@ then
     )
 end
 
-print(
-    "[Main] Logger dependencies set."
-)
-
---// =========================================================
---// ESP
---// =========================================================
+print("[Main] Logger dependencies set.")
 
 local ESP =
     LoadModule("ESP")
@@ -541,23 +385,14 @@ if not ESP then
     error("[Main] ESP failed to load.")
 end
 
-if type(ESP.SetDependencies) ==
-    "function"
-then
-
+if type(ESP.SetDependencies) == "function" then
     ESP:SetDependencies(
         Config,
         TargetManager
     )
 end
 
-print(
-    "[Main] ESP dependencies set."
-)
-
---// =========================================================
---// HEALTH OVERLAY
---// =========================================================
+print("[Main] ESP dependencies set.")
 
 local HealthOverlay =
     LoadModule("HealthOverlay")
@@ -566,23 +401,14 @@ if not HealthOverlay then
     error("[Main] HealthOverlay failed to load.")
 end
 
-if type(HealthOverlay.SetDependencies) ==
-    "function"
-then
-
+if type(HealthOverlay.SetDependencies) == "function" then
     HealthOverlay:SetDependencies(
         Config,
         TargetManager
     )
 end
 
-print(
-    "[Main] HealthOverlay dependencies set."
-)
-
---// =========================================================
---// AUTOPLAY
---// =========================================================
+print("[Main] HealthOverlay dependencies set.")
 
 local AutoPlay =
     LoadModule("AutoPlay")
@@ -591,10 +417,7 @@ if not AutoPlay then
     error("[Main] AutoPlay failed to load.")
 end
 
-if type(AutoPlay.SetDependencies) ==
-    "function"
-then
-
+if type(AutoPlay.SetDependencies) == "function" then
     AutoPlay:SetDependencies(
         Config,
         TargetManager,
@@ -602,13 +425,7 @@ then
     )
 end
 
-print(
-    "[Main] AutoPlay dependencies set."
-)
-
---// =========================================================
---// UI
---// =========================================================
+print("[Main] AutoPlay dependencies set.")
 
 local UI =
     LoadModule("UI")
@@ -617,10 +434,7 @@ if not UI then
     error("[Main] UI failed to load.")
 end
 
-if type(UI.SetDependencies) ==
-    "function"
-then
-
+if type(UI.SetDependencies) == "function" then
     UI:SetDependencies(
         Config,
         TargetManager,
@@ -632,32 +446,17 @@ then
     )
 end
 
-print(
-    "[Main] UI dependencies set."
-)
-
---// =========================================================
---// INITIALIZATION
---// =========================================================
+print("[Main] UI dependencies set.")
 
 print("")
 print("========================================")
 print("        INITIALIZING GAKURAN")
 print("========================================")
 
-local function SafeInitialize(
-    name,
-    module
-)
+local function SafeInitialize(name, module)
 
     if not module then
-
-        warn(
-            "[Main] " ..
-            name ..
-            " is nil."
-        )
-
+        warn("[Main] " .. name .. " is nil.")
         return false
     end
 
@@ -675,9 +474,7 @@ local function SafeInitialize(
     local ok,
           initializeError =
         pcall(function()
-
             module:Initialize()
-
         end)
 
     if not ok then
@@ -688,9 +485,7 @@ local function SafeInitialize(
             " initialization failed:"
         )
 
-        warn(
-            tostring(initializeError)
-        )
+        warn(tostring(initializeError))
 
         return false
     end
@@ -703,59 +498,21 @@ local function SafeInitialize(
     return true
 end
 
-SafeInitialize(
-    "AnimationTracker",
-    AnimationTracker
-)
-
-SafeInitialize(
-    "TargetManager",
-    TargetManager
-)
-
-SafeInitialize(
-    "ParryController",
-    ParryController
-)
-
-SafeInitialize(
-    "Logger",
-    Logger
-)
-
-SafeInitialize(
-    "ESP",
-    ESP
-)
-
-SafeInitialize(
-    "HealthOverlay",
-    HealthOverlay
-)
-
-SafeInitialize(
-    "AutoPlay",
-    AutoPlay
-)
-
-SafeInitialize(
-    "UI",
-    UI
-)
-
---// =========================================================
---// START SYSTEMS
---// =========================================================
+SafeInitialize("AnimationTracker", AnimationTracker)
+SafeInitialize("TargetManager", TargetManager)
+SafeInitialize("ParryController", ParryController)
+SafeInitialize("Logger", Logger)
+SafeInitialize("ESP", ESP)
+SafeInitialize("HealthOverlay", HealthOverlay)
+SafeInitialize("AutoPlay", AutoPlay)
+SafeInitialize("UI", UI)
 
 print("")
 print("========================================")
 print("          STARTING SYSTEMS")
 print("========================================")
 
-local function SafeStart(
-    name,
-    module
-)
+local function SafeStart(name, module)
 
     if not module then
         return false
@@ -775,9 +532,7 @@ local function SafeStart(
     local ok,
           startError =
         pcall(function()
-
             module:Start()
-
         end)
 
     if not ok then
@@ -788,9 +543,7 @@ local function SafeStart(
             " failed to start:"
         )
 
-        warn(
-            tostring(startError)
-        )
+        warn(tostring(startError))
 
         return false
     end
@@ -803,150 +556,46 @@ local function SafeStart(
     return true
 end
 
-SafeStart(
-    "AnimationTracker",
-    AnimationTracker
-)
+SafeStart("AnimationTracker", AnimationTracker)
+SafeStart("TargetManager", TargetManager)
+SafeStart("ParryController", ParryController)
+SafeStart("Logger", Logger)
+SafeStart("ESP", ESP)
+SafeStart("HealthOverlay", HealthOverlay)
+SafeStart("AutoPlay", AutoPlay)
 
-SafeStart(
-    "TargetManager",
-    TargetManager
-)
-
-SafeStart(
-    "ParryController",
-    ParryController
-)
-
-SafeStart(
-    "Logger",
-    Logger
-)
-
-SafeStart(
-    "ESP",
-    ESP
-)
-
-SafeStart(
-    "HealthOverlay",
-    HealthOverlay
-)
-
-SafeStart(
-    "AutoPlay",
-    AutoPlay
-)
-
---// =========================================================
---// MATCHA COMPATIBILITY
---// =========================================================
-
-print(
-    "[Main] Main-level input connections skipped."
-)
-
-print(
-    "[Main] Main-level character connections skipped."
-)
-
---// =========================================================
---// GLOBAL
---// =========================================================
+print("[Main] Main-level input connections skipped.")
+print("[Main] Main-level character connections skipped.")
 
 _G.Gakuran = {
 
     Config = Config,
-
-    AnimationDatabase =
-        AnimationDatabase,
-
-    AnimationTracker =
-        AnimationTracker,
-
-    TargetManager =
-        TargetManager,
-
-    ParryController =
-        ParryController,
-
-    Logger =
-        Logger,
-
-    ESP =
-        ESP,
-
-    HealthOverlay =
-        HealthOverlay,
-
-    AutoPlay =
-        AutoPlay,
-
-    UI =
-        UI,
-
-    Modules =
-        LoadedModules
+    AnimationDatabase = AnimationDatabase,
+    AnimationTracker = AnimationTracker,
+    TargetManager = TargetManager,
+    ParryController = ParryController,
+    Logger = Logger,
+    ESP = ESP,
+    HealthOverlay = HealthOverlay,
+    AutoPlay = AutoPlay,
+    UI = UI,
+    Modules = LoadedModules
 }
-
---// =========================================================
---// FINAL
---// =========================================================
 
 print("")
 print("========================================")
 print("       GAKURAN SYSTEM READY")
 print("========================================")
 
-print(
-    "[Main] Config: " ..
-    tostring(type(Config))
-)
-
-print(
-    "[Main] AnimationDatabase: " ..
-    tostring(type(AnimationDatabase))
-)
-
-print(
-    "[Main] AnimationTracker: " ..
-    tostring(type(AnimationTracker))
-)
-
-print(
-    "[Main] TargetManager: " ..
-    tostring(type(TargetManager))
-)
-
-print(
-    "[Main] ParryController: " ..
-    tostring(type(ParryController))
-)
-
-print(
-    "[Main] Logger: " ..
-    tostring(type(Logger))
-)
-
-print(
-    "[Main] ESP: " ..
-    tostring(type(ESP))
-)
-
-print(
-    "[Main] HealthOverlay: " ..
-    tostring(type(HealthOverlay))
-)
-
-print(
-    "[Main] AutoPlay: " ..
-    tostring(type(AutoPlay))
-)
-
-print(
-    "[Main] UI: " ..
-    tostring(type(UI))
-)
+print("[Main] Config: " .. tostring(type(Config)))
+print("[Main] AnimationDatabase: " .. tostring(type(AnimationDatabase)))
+print("[Main] AnimationTracker: " .. tostring(type(AnimationTracker)))
+print("[Main] TargetManager: " .. tostring(type(TargetManager)))
+print("[Main] ParryController: " .. tostring(type(ParryController)))
+print("[Main] Logger: " .. tostring(type(Logger)))
+print("[Main] ESP: " .. tostring(type(ESP)))
+print("[Main] HealthOverlay: " .. tostring(type(HealthOverlay)))
+print("[Main] AutoPlay: " .. tostring(type(AutoPlay)))
+print("[Main] UI: " .. tostring(type(UI)))
 
 print("========================================")
-
