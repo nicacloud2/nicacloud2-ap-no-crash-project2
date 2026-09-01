@@ -1,6 +1,10 @@
 --// Gakuran Modular Project
 --// Main.lua
 
+--==================================================
+-- SERVICES
+--==================================================
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -39,76 +43,55 @@ local State = {
 }
 
 --==================================================
--- INITIALIZE MODULES
+-- DEBUG
+--==================================================
+
+local function DebugPrint(...)
+
+    if State.Debug then
+        print("[Gakuran Debug]", ...)
+    end
+
+end
+
+--==================================================
+-- INITIALIZE
 --==================================================
 
 local function InitializeModules()
 
+    DebugPrint("Initializing modules...")
+
     Config:Initialize(State)
 
     AnimationTracker:Initialize(State)
+
     TargetManager:Initialize(State)
 
     ParryController:Initialize(State)
 
     ESP:Initialize(State)
+
     HealthOverlay:Initialize(State)
 
     AutoPlay:Initialize(State)
+
     Logger:Initialize(State)
 
     UI:Initialize(State)
 
-end
-
---==================================================
--- START MODULES
---==================================================
-
-local function StartModules()
-
-    TargetManager:Start()
-
-    AnimationTracker:TrackLocalPlayer()
-    AnimationTracker:TrackCharacters()
-
-    ParryController:Start()
-
-    ESP:Start()
-    HealthOverlay:Start()
-
-    AutoPlay:Start()
-
-    UI:Start()
+    DebugPrint("Modules initialized.")
 
 end
 
 --==================================================
--- STOP MODULES
---==================================================
-
-local function StopModules()
-
-    ParryController:Stop()
-
-    AnimationTracker:StopAll()
-
-    TargetManager:Stop()
-
-    ESP:Stop()
-    HealthOverlay:Stop()
-
-    AutoPlay:Stop()
-
-end
-
---==================================================
--- TARGET UPDATE
+-- TARGET
 --==================================================
 
 local function UpdateTarget()
 
-    local target = TargetManager:GetCurrentTarget()
+    local target =
+        TargetManager:GetCurrentTarget()
 
     State.CurrentTarget = target
 
@@ -120,23 +103,119 @@ end
 
 local function SetupInput()
 
-    local connection = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    local connection
 
-        if gameProcessed then
-            return
+    connection = UserInputService.InputBegan:Connect(
+        function(input, gameProcessed)
+
+            if gameProcessed then
+                return
+            end
+
+            --======================================
+            -- DODGE
+            --======================================
+
+            if input.KeyCode == Enum.KeyCode.X then
+
+                if Config.Parry.Enabled then
+                    ParryController:Dodge()
+                end
+
+            end
+
+            --======================================
+            -- MANUAL BLOCK
+            --======================================
+
+            if input.KeyCode == Enum.KeyCode.F then
+
+                if Config.Parry.Enabled then
+                    ParryController:BlockStart()
+                end
+
+            end
+
+            --======================================
+            -- TARGET CYCLE
+            --======================================
+
+            if input.KeyCode == Enum.KeyCode.Tab then
+
+                if Config.Targeting.CycleTargets then
+
+                    TargetManager:CycleTarget()
+
+                    UpdateTarget()
+
+                end
+
+            end
+
         end
+    )
 
-        if input.KeyCode == Enum.KeyCode.X then
-            ParryController:Dodge()
-        end
+    table.insert(
+        State.Connections,
+        connection
+    )
 
-        if input.KeyCode == Enum.KeyCode.F then
-            ParryController:BlockStart()
-        end
+    --==============================================
+    -- BLOCK RELEASE
+    --==============================================
 
-    end)
+    local releaseConnection
 
-    table.insert(State.Connections, connection)
+    releaseConnection =
+        UserInputService.InputEnded:Connect(
+            function(input)
+
+                if input.KeyCode == Enum.KeyCode.F then
+
+                    ParryController:BlockEnd()
+
+                end
+
+            end
+        )
+
+    table.insert(
+        State.Connections,
+        releaseConnection
+    )
+
+end
+
+--==================================================
+-- CHARACTER EVENTS
+--==================================================
+
+local function SetupCharacterEvents()
+
+    local connection
+
+    connection =
+        LocalPlayer.CharacterAdded:Connect(
+            function(character)
+
+                DebugPrint(
+                    "Local character loaded:",
+                    character.Name
+                )
+
+                task.wait(0.5)
+
+                AnimationTracker:RefreshLocalPlayer()
+
+                TargetManager:Refresh()
+
+            end
+        )
+
+    table.insert(
+        State.Connections,
+        connection
+    )
 
 end
 
@@ -146,17 +225,95 @@ end
 
 local function StartLoop()
 
-    local connection = RunService.Heartbeat:Connect(function()
+    local connection
 
-        if not State.Running then
-            return
-        end
+    connection =
+        RunService.Heartbeat:Connect(
+            function()
 
-        UpdateTarget()
+                if not State.Running then
+                    return
+                end
 
-    end)
+                UpdateTarget()
 
-    table.insert(State.Connections, connection)
+            end
+        )
+
+    table.insert(
+        State.Connections,
+        connection
+    )
+
+end
+
+--==================================================
+-- START MODULES
+--==================================================
+
+local function StartModules()
+
+    DebugPrint("Starting modules...")
+
+    -- Target system
+    TargetManager:Start()
+
+    -- Animation tracking
+    AnimationTracker:TrackLocalPlayer()
+    AnimationTracker:TrackCharacters()
+
+    -- Parry
+    ParryController:Start()
+
+    -- Logger
+    Logger:ConnectAnimationTracker()
+
+    -- ESP
+    ESP:Start()
+
+    -- Health
+    HealthOverlay:Start()
+
+    -- AutoPlay
+    AutoPlay:Start()
+
+    -- UI
+    UI:Start()
+
+    DebugPrint("Modules started.")
+
+end
+
+--==================================================
+-- STOP MODULES
+--==================================================
+
+local function StopModules()
+
+    DebugPrint("Stopping modules...")
+
+    -- Stop parry first
+    ParryController:Stop()
+
+    -- Stop animation tracking
+    AnimationTracker:StopAll()
+
+    -- Stop targeting
+    TargetManager:Stop()
+
+    -- Stop ESP
+    ESP:Stop()
+
+    -- Stop health overlay
+    HealthOverlay:Stop()
+
+    -- Stop AutoPlay
+    AutoPlay:Stop()
+
+    -- Disconnect Logger
+    Logger:DisconnectAnimationTracker()
+
+    DebugPrint("Modules stopped.")
 
 end
 
@@ -166,45 +323,91 @@ end
 
 local function Cleanup()
 
+    if not State.Running then
+        return
+    end
+
+    DebugPrint("Cleaning up...")
+
     State.Running = false
 
-    for _, connection in ipairs(State.Connections) do
+    -- Disconnect Main connections
+    for _, connection in ipairs(
+        State.Connections
+    ) do
 
         if connection then
-            connection:Disconnect()
+
+            pcall(function()
+                connection:Disconnect()
+            end)
+
         end
 
     end
 
-    table.clear(State.Connections)
+    table.clear(
+        State.Connections
+    )
 
     StopModules()
+
+    State.CurrentTarget = nil
+
+    DebugPrint("Cleanup complete.")
 
 end
 
 --==================================================
--- STARTUP
+-- START
 --==================================================
 
 local function Start()
 
     if State.Running then
+        warn("[Gakuran] Already running.")
         return
     end
 
+    print("======================================")
+    print("       GAKURAN MODULAR PROJECT")
+    print("======================================")
+
     State.Running = true
 
-    InitializeModules()
-    StartModules()
-    SetupInput()
-    StartLoop()
+    local success, err = pcall(function()
 
-    print("[Gakuran] Main.lua started successfully.")
+        InitializeModules()
+
+        StartModules()
+
+        SetupInput()
+
+        SetupCharacterEvents()
+
+        StartLoop()
+
+    end)
+
+    if not success then
+
+        warn(
+            "[Gakuran] Startup error:",
+            err
+        )
+
+        Cleanup()
+
+        return
+
+    end
+
+    print("[Gakuran] Successfully started.")
 
 end
 
 --==================================================
--- RUN
+-- START PROJECT
 --==================================================
 
 Start()
