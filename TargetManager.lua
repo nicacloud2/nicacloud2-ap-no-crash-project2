@@ -1,37 +1,89 @@
 --// TargetManager.lua
---// Gakuran Script - Target Management
+--// Gakuran Target Management Module
 
 local Players = game:GetService("Players")
 
+local LocalPlayer = Players.LocalPlayer
+
+local Config = require(script.Parent.Config)
+
 local TargetManager = {}
 
+--------------------------------------------------
+--// State
+--------------------------------------------------
+
 TargetManager.State = nil
-TargetManager.Config = nil
+TargetManager.TargetCharacters = {}
+TargetManager.CurrentTarget = nil
+TargetManager.CurrentTargetIndex = 1
 
---==================================================
--- Initialization
---==================================================
+--------------------------------------------------
+--// Initialize
+--------------------------------------------------
 
-function TargetManager:Initialize(State, Config)
+function TargetManager:Initialize(State)
     self.State = State
-    self.Config = Config
-
-    self:Refresh()
 end
 
---==================================================
--- Character Helpers
---==================================================
+--------------------------------------------------
+--// Get All Folders
+--------------------------------------------------
+
+function TargetManager:GetAllFoldersInWorkspace()
+    local folders = {}
+
+    for _, object in ipairs(workspace:GetChildren()) do
+        if object:IsA("Folder") then
+            table.insert(folders, object)
+        end
+    end
+
+    return folders
+end
+
+--------------------------------------------------
+--// Get Characters From Folder
+--------------------------------------------------
+
+function TargetManager:GetAllCharactersInFolder(folder)
+    local characters = {}
+
+    if not folder then
+        return characters
+    end
+
+    for _, object in ipairs(folder:GetChildren()) do
+        if object:IsA("Model") then
+            local humanoid = object:FindFirstChildOfClass("Humanoid")
+            local root = object:FindFirstChild("HumanoidRootPart")
+
+            if humanoid and root then
+                table.insert(characters, object)
+            end
+        end
+    end
+
+    return characters
+end
+
+--------------------------------------------------
+--// Is Valid Character
+--------------------------------------------------
 
 function TargetManager:IsValidCharacter(character)
     if not character then
         return false
     end
 
-    local humanoid = character:FindFirstChildOfClass("Humanoid")
-    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    if character == LocalPlayer.Character then
+        return false
+    end
 
-    if not humanoid or not rootPart then
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    local root = character:FindFirstChild("HumanoidRootPart")
+
+    if not humanoid or not root then
         return false
     end
 
@@ -42,33 +94,32 @@ function TargetManager:IsValidCharacter(character)
     return true
 end
 
-function TargetManager:IsIgnored(player, character)
-    if not player and not character then
-        return true
+--------------------------------------------------
+--// Get Root Part
+--------------------------------------------------
+
+function TargetManager:GetRoot(character)
+    if not character then
+        return nil
     end
 
-    local ignoreIds = self.Config.IgnoreIds or {}
-
-    if player and table.find(ignoreIds, player.UserId) then
-        return true
-    end
-
-    return false
+    return character:FindFirstChild("HumanoidRootPart")
+        or character.PrimaryPart
 end
 
---==================================================
--- Distance
---==================================================
+--------------------------------------------------
+--// Get Distance
+--------------------------------------------------
 
 function TargetManager:GetDistance(character)
-    local localPlayer = Players.LocalPlayer
+    local localCharacter = LocalPlayer.Character
 
-    if not localPlayer.Character then
+    if not localCharacter then
         return math.huge
     end
 
-    local localRoot = localPlayer.Character:FindFirstChild("HumanoidRootPart")
-    local targetRoot = character and character:FindFirstChild("HumanoidRootPart")
+    local localRoot = self:GetRoot(localCharacter)
+    local targetRoot = self:GetRoot(character)
 
     if not localRoot or not targetRoot then
         return math.huge
@@ -77,193 +128,361 @@ function TargetManager:GetDistance(character)
     return (localRoot.Position - targetRoot.Position).Magnitude
 end
 
---==================================================
--- Get Targets
---==================================================
+--------------------------------------------------
+--// Check Range
+--------------------------------------------------
 
-function TargetManager:GetTargets()
-    local targets = {}
-    local localPlayer = Players.LocalPlayer
+function TargetManager:IsInRange(character, maxDistance)
+    maxDistance = maxDistance
+        or Config.Targeting.MaxDistance
 
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= localPlayer then
-            local character = player.Character
+    return self:GetDistance(character) <= maxDistance
+end
 
-            if self:IsValidCharacter(character)
-                and not self:IsIgnored(player, character) then
+--------------------------------------------------
+--// Find Characters
+--------------------------------------------------
 
-                local distance = self:GetDistance(character)
+function TargetManager:FindCharacters()
+    local characters = {}
 
-                local maxDistance = self.Config.Targeting
-                    and self.Config.Targeting.MaxDistance
-                    or math.huge
+    --------------------------------------------------
+    -- Search workspace
+    --------------------------------------------------
 
-                if distance <= maxDistance then
-                    table.insert(targets, {
-                        Player = player,
-                        Character = character,
-                        Distance = distance,
-                    })
-                end
+    for _, object in ipairs(workspace:GetDescendants()) do
+
+        if object:IsA("Model") and self:IsValidCharacter(object) then
+
+            if not table.find(characters, object) then
+                table.insert(characters, object)
             end
+
         end
     end
 
-    table.sort(targets, function(a, b)
-        return a.Distance < b.Distance
-    end)
+    --------------------------------------------------
+    -- Filter by distance
+    --------------------------------------------------
 
-    return targets
+    local filtered = {}
+
+    for _, character in ipairs(characters) do
+        if self:IsInRange(character) then
+            table.insert(filtered, character)
+        end
+    end
+
+    return filtered
 end
 
---==================================================
--- Refresh
---==================================================
+--------------------------------------------------
+--// Refresh Targets
+--------------------------------------------------
 
 function TargetManager:Refresh()
-    if not self.State then
+    local previousTarget = self.CurrentTarget
+
+    self.TargetCharacters = self:FindCharacters()
+
+    --------------------------------------------------
+    -- Sort by distance
+    --------------------------------------------------
+
+    table.sort(self.TargetCharacters, function(a, b)
+        return self:GetDistance(a) < self:GetDistance(b)
+    end)
+
+    --------------------------------------------------
+    -- Keep Current Target
+    --------------------------------------------------
+
+    if previousTarget
+        and table.find(self.TargetCharacters, previousTarget)
+    then
+        self.CurrentTarget = previousTarget
+
+        local index = table.find(
+            self.TargetCharacters,
+            previousTarget
+        )
+
+        if index then
+            self.CurrentTargetIndex = index
+        end
+
         return
     end
 
-    local targets = self:GetTargets()
+    --------------------------------------------------
+    -- Select First Target
+    --------------------------------------------------
 
-    table.clear(self.State.TargetCharacters)
+    self.CurrentTargetIndex = 1
 
-    for _, target in ipairs(targets) do
-        table.insert(
-            self.State.TargetCharacters,
-            target.Character
-        )
-    end
-
-    -- Keep index valid
-    if #self.State.TargetCharacters == 0 then
-        self.State.CurrentTargetIndex = 1
-    elseif self.State.CurrentTargetIndex > #self.State.TargetCharacters then
-        self.State.CurrentTargetIndex = 1
+    if #self.TargetCharacters > 0 then
+        self.CurrentTarget = self.TargetCharacters[1]
+    else
+        self.CurrentTarget = nil
     end
 end
 
---==================================================
--- Current Target
---==================================================
+--------------------------------------------------
+--// Get Current Target
+--------------------------------------------------
 
 function TargetManager:GetCurrentTarget()
-    if not self.State then
-        return nil
+    if self.CurrentTarget
+        and self:IsValidCharacter(self.CurrentTarget)
+        and self:IsInRange(self.CurrentTarget)
+    then
+        return self.CurrentTarget
     end
 
-    local targets = self.State.TargetCharacters
+    self:Refresh()
 
-    if #targets == 0 then
-        return nil
-    end
+    return self.CurrentTarget
+end
 
-    local index = self.State.CurrentTargetIndex
+--------------------------------------------------
+--// Set Target
+--------------------------------------------------
 
-    if index < 1 or index > #targets then
-        index = 1
-        self.State.CurrentTargetIndex = index
-    end
-
-    local character = targets[index]
-
+function TargetManager:SetTarget(character)
     if not self:IsValidCharacter(character) then
-        self:Refresh()
-        return self:GetCurrentTarget()
+        return false
     end
 
-    return character
+    if not self:IsInRange(character) then
+        return false
+    end
+
+    self.CurrentTarget = character
+
+    local index = table.find(
+        self.TargetCharacters,
+        character
+    )
+
+    if index then
+        self.CurrentTargetIndex = index
+    end
+
+    if self.OnTargetChanged then
+        self.OnTargetChanged(character)
+    end
+
+    return true
 end
 
---==================================================
--- Cycle Target
---==================================================
+--------------------------------------------------
+--// Cycle Target
+--------------------------------------------------
 
-function TargetManager:CycleNext()
-    if not self.State then
-        return nil
-    end
+function TargetManager:CycleTarget(direction)
+    direction = direction or 1
 
     self:Refresh()
 
-    local targets = self.State.TargetCharacters
+    local count = #self.TargetCharacters
 
-    if #targets == 0 then
+    if count == 0 then
+        self.CurrentTarget = nil
         return nil
     end
 
-    self.State.CurrentTargetIndex =
-        (self.State.CurrentTargetIndex % #targets) + 1
+    --------------------------------------------------
+    -- Calculate New Index
+    --------------------------------------------------
 
-    return self:GetCurrentTarget()
+    local newIndex =
+        self.CurrentTargetIndex + direction
+
+    if newIndex > count then
+        newIndex = 1
+    elseif newIndex < 1 then
+        newIndex = count
+    end
+
+    self.CurrentTargetIndex = newIndex
+
+    local target = self.TargetCharacters[newIndex]
+
+    self:SetTarget(target)
+
+    return target
 end
 
-function TargetManager:CyclePrevious()
-    if not self.State then
-        return nil
-    end
+--------------------------------------------------
+--// Get All Targets
+--------------------------------------------------
 
-    self:Refresh()
-
-    local targets = self.State.TargetCharacters
-
-    if #targets == 0 then
-        return nil
-    end
-
-    self.State.CurrentTargetIndex =
-        ((self.State.CurrentTargetIndex - 2) % #targets) + 1
-
-    return self:GetCurrentTarget()
+function TargetManager:GetTargets()
+    return self.TargetCharacters
 end
 
---==================================================
--- Find Specific Character
---==================================================
+--------------------------------------------------
+--// Get Target Count
+--------------------------------------------------
 
-function TargetManager:FindPlayer(player)
-    if not player then
-        return nil
-    end
-
-    local character = player.Character
-
-    if self:IsValidCharacter(character)
-        and not self:IsIgnored(player, character) then
-
-        return character
-    end
-
-    return nil
+function TargetManager:GetTargetCount()
+    return #self.TargetCharacters
 end
 
---==================================================
--- Get Target Root
---==================================================
+--------------------------------------------------
+--// Has Target
+--------------------------------------------------
 
-function TargetManager:GetRoot(character)
-    character = character or self:GetCurrentTarget()
+function TargetManager:HasTarget()
+    return self:GetCurrentTarget() ~= nil
+end
+
+--------------------------------------------------
+--// Remove Target
+--------------------------------------------------
+
+function TargetManager:RemoveTarget(character)
+    local index = table.find(
+        self.TargetCharacters,
+        character
+    )
+
+    if not index then
+        return
+    end
+
+    table.remove(
+        self.TargetCharacters,
+        index
+    )
+
+    if self.CurrentTarget == character then
+
+        self.CurrentTarget = nil
+
+        if #self.TargetCharacters > 0 then
+            self.CurrentTargetIndex =
+                math.clamp(
+                    self.CurrentTargetIndex,
+                    1,
+                    #self.TargetCharacters
+                )
+
+            self.CurrentTarget =
+                self.TargetCharacters[
+                    self.CurrentTargetIndex
+                ]
+        else
+            self.CurrentTargetIndex = 1
+        end
+
+        if self.OnTargetChanged then
+            self.OnTargetChanged(
+                self.CurrentTarget
+            )
+        end
+    end
+end
+
+--------------------------------------------------
+--// Clear Targets
+--------------------------------------------------
+
+function TargetManager:Clear()
+    self.TargetCharacters = {}
+    self.CurrentTarget = nil
+    self.CurrentTargetIndex = 1
+
+    if self.OnTargetChanged then
+        self.OnTargetChanged(nil)
+    end
+end
+
+--------------------------------------------------
+--// Get Target Player
+--------------------------------------------------
+
+function TargetManager:GetTargetPlayer(character)
+    character = character or self.CurrentTarget
 
     if not character then
         return nil
     end
 
-    return character:FindFirstChild("HumanoidRootPart")
+    return Players:GetPlayerFromCharacter(character)
 end
 
---==================================================
--- Cleanup
---==================================================
+--------------------------------------------------
+--// Get Target Humanoid
+--------------------------------------------------
 
-function TargetManager:Destroy()
-    if self.State then
-        table.clear(self.State.TargetCharacters)
-        self.State.CurrentTargetIndex = 1
+function TargetManager:GetHumanoid(character)
+    character = character or self.CurrentTarget
+
+    if not character then
+        return nil
     end
 
-    self.State = nil
-    self.Config = nil
+    return character:FindFirstChildOfClass("Humanoid")
+end
+
+--------------------------------------------------
+--// Get Target Health
+--------------------------------------------------
+
+function TargetManager:GetHealth(character)
+    local humanoid = self:GetHumanoid(character)
+
+    if not humanoid then
+        return 0
+    end
+
+    return humanoid.Health
+end
+
+--------------------------------------------------
+--// Get Target Health Percentage
+--------------------------------------------------
+
+function TargetManager:GetHealthPercentage(character)
+    local humanoid = self:GetHumanoid(character)
+
+    if not humanoid or humanoid.MaxHealth <= 0 then
+        return 0
+    end
+
+    return humanoid.Health / humanoid.MaxHealth
+end
+
+--------------------------------------------------
+--// Automatic Refresh Loop
+--------------------------------------------------
+
+function TargetManager:Start()
+    if self.Running then
+        return
+    end
+
+    self.Running = true
+
+    task.spawn(function()
+        while self.Running do
+
+            if Config.Enabled then
+                self:Refresh()
+            end
+
+            task.wait(0.25)
+        end
+    end)
+end
+
+--------------------------------------------------
+--// Stop
+--------------------------------------------------
+
+function TargetManager:Stop()
+    self.Running = false
 end
 
 return TargetManager
