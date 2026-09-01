@@ -1,10 +1,11 @@
 --// =========================================================
 --// GAKURAN - HEALTH OVERLAY
 --// GitHub / Matcha Version
---// POLLING SAFE
+--// DRAWING API VERSION
 --// =========================================================
 
 local Players = game:GetService("Players")
+local Camera = workspace.CurrentCamera
 
 local HealthOverlay = {}
 
@@ -27,6 +28,8 @@ HealthOverlay.PollInterval = 0.15
 function HealthOverlay:SetDependencies(config, targetManager)
     Config = config
     TargetManager = targetManager
+
+    print("[HealthOverlay] Dependencies received.")
 end
 
 
@@ -42,7 +45,7 @@ end
 
 
 --// =========================================================
---// CREATE
+--// CREATE DRAWINGS
 --// =========================================================
 
 function HealthOverlay:Create(player)
@@ -55,78 +58,33 @@ function HealthOverlay:Create(player)
         return
     end
 
-    local character = player.Character
-
-    if not character then
-        return
+    if self.Objects[player] then
+        self:Remove(player)
     end
 
-    local head = character:FindFirstChild("Head")
 
-    if not head then
-        return
-    end
-
-    self:Remove(player)
+    local box = Drawing.new("Square")
+    box.Visible = false
+    box.Filled = false
+    box.Thickness = 1
 
 
-    local billboard = Instance.new("BillboardGui")
-
-    billboard.Name = "GakuranHealth"
-    billboard.Adornee = head
-    billboard.Size = UDim2.new(0, 120, 0, 35)
-    billboard.StudsOffset = Vector3.new(0, 3, 0)
-    billboard.AlwaysOnTop = true
-    billboard.ResetOnSpawn = false
-
-    billboard.Parent = head
+    local healthBar = Drawing.new("Square")
+    healthBar.Visible = false
+    healthBar.Filled = true
+    healthBar.Thickness = 1
 
 
-    --// Background
-
-    local background = Instance.new("Frame")
-
-    background.Name = "Background"
-    background.Size = UDim2.new(1, 0, 0, 8)
-    background.Position = UDim2.new(0, 0, 0, 0)
-    background.BorderSizePixel = 0
-
-    background.Parent = billboard
-
-
-    --// Health Bar
-
-    local healthBar = Instance.new("Frame")
-
-    healthBar.Name = "HealthBar"
-    healthBar.Size = UDim2.new(1, 0, 1, 0)
-    healthBar.Position = UDim2.new(0, 0, 0, 0)
-    healthBar.BorderSizePixel = 0
-
-    healthBar.Parent = background
-
-
-    --// Health Text
-
-    local text = Instance.new("TextLabel")
-
-    text.Name = "HealthText"
-    text.Size = UDim2.new(1, 0, 0, 20)
-    text.Position = UDim2.new(0, 0, 0, 10)
-
-    text.BackgroundTransparency = 1
-
+    local text = Drawing.new("Text")
+    text.Visible = false
+    text.Center = true
+    text.Outline = true
+    text.Size = 13
     text.Text = "100 / 100"
-    text.TextSize = 12
-    text.Font = Enum.Font.GothamBold
-    text.TextStrokeTransparency = 0.5
-
-    text.Parent = billboard
 
 
     self.Objects[player] = {
-        Billboard = billboard,
-        Background = background,
+        Box = box,
         HealthBar = healthBar,
         Text = text
     }
@@ -145,13 +103,27 @@ function HealthOverlay:Remove(player)
         return
     end
 
-    if object.Billboard then
 
+    if object.Box then
         pcall(function()
-            object.Billboard:Destroy()
+            object.Box:Remove()
         end)
-
     end
+
+
+    if object.HealthBar then
+        pcall(function()
+            object.HealthBar:Remove()
+        end)
+    end
+
+
+    if object.Text then
+        pcall(function()
+            object.Text:Remove()
+        end)
+    end
+
 
     self.Objects[player] = nil
 end
@@ -169,28 +141,70 @@ function HealthOverlay:UpdatePlayer(player)
         return
     end
 
+
     local character = player.Character
 
     if not character then
-        self:Remove(player)
+        self:Hide(object)
         return
     end
+
 
     local humanoid =
         character:FindFirstChildOfClass("Humanoid")
 
-    if not humanoid then
-        self:Remove(player)
+    local root =
+        character:FindFirstChild("HumanoidRootPart")
+
+    if not humanoid or not root then
+        self:Hide(object)
         return
     end
 
 
-    local maxHealth = humanoid.MaxHealth
     local health = humanoid.Health
+    local maxHealth = humanoid.MaxHealth
+
 
     if maxHealth <= 0 then
         maxHealth = 100
     end
+
+
+    if health <= 0 then
+        self:Hide(object)
+        return
+    end
+
+
+    local position, onScreen =
+        Camera:WorldToViewportPoint(root.Position)
+
+
+    if not onScreen or position.Z <= 0 then
+        self:Hide(object)
+        return
+    end
+
+
+    local distance = position.Z
+
+    local height =
+        math.clamp(
+            1800 / math.max(distance, 1),
+            35,
+            90
+        )
+
+
+    local width = height * 1.8
+
+
+    local x =
+        position.X - (width / 2)
+
+    local y =
+        position.Y - height
 
 
     local percentage =
@@ -201,12 +215,53 @@ function HealthOverlay:UpdatePlayer(player)
         )
 
 
+    --// Box
+
+    object.Box.Position =
+        Vector2.new(
+            x,
+            y
+        )
+
+    object.Box.Size =
+        Vector2.new(
+            width,
+            height
+        )
+
+    object.Box.Visible = true
+
+
+    --// Health bar
+
+    local barWidth = 4
+
+    local barHeight =
+        height * percentage
+
+
+    object.HealthBar.Position =
+        Vector2.new(
+            x - barWidth - 3,
+            y + height - barHeight
+        )
+
+
     object.HealthBar.Size =
-        UDim2.new(
-            percentage,
-            0,
-            1,
-            0
+        Vector2.new(
+            barWidth,
+            barHeight
+        )
+
+    object.HealthBar.Visible = true
+
+
+    --// Health text
+
+    object.Text.Position =
+        Vector2.new(
+            position.X,
+            y - 15
         )
 
 
@@ -218,8 +273,26 @@ function HealthOverlay:UpdatePlayer(player)
         )
 
 
-    if health <= 0 then
-        self:Remove(player)
+    object.Text.Visible = true
+end
+
+
+--// =========================================================
+--// HIDE
+--// =========================================================
+
+function HealthOverlay:Hide(object)
+
+    if object.Box then
+        object.Box.Visible = false
+    end
+
+    if object.HealthBar then
+        object.HealthBar.Visible = false
+    end
+
+    if object.Text then
+        object.Text.Visible = false
     end
 end
 
@@ -245,56 +318,13 @@ function HealthOverlay:Refresh()
 
         if player ~= Players.LocalPlayer then
 
-            local character = player.Character
-
-
-            if character then
-
-                local humanoid =
-                    character:FindFirstChildOfClass("Humanoid")
-
-                local head =
-                    character:FindFirstChild("Head")
-
-
-                if humanoid
-                    and head
-                    and humanoid.Health > 0
-                then
-
-                    local object =
-                        self.Objects[player]
-
-
-                    if not object then
-
-                        self:Create(player)
-
-                    elseif object.Billboard
-                        and object.Billboard.Adornee ~= head
-                    then
-
-                        self:Create(player)
-
-                    end
-
-
-                    self:UpdatePlayer(player)
-
-                else
-
-                    self:Remove(player)
-
-                end
-
-            else
-
-                self:Remove(player)
-
+            if not self.Objects[player] then
+                self:Create(player)
             end
 
-        end
 
+            self:UpdatePlayer(player)
+        end
     end
 
 
@@ -307,9 +337,7 @@ function HealthOverlay:Refresh()
         then
 
             self:Remove(player)
-
         end
-
     end
 end
 
@@ -328,6 +356,7 @@ function HealthOverlay:Poll()
         return
     end
 
+
     pcall(function()
         self:Refresh()
     end)
@@ -340,13 +369,14 @@ end
 
 function HealthOverlay:SetEnabled(enabled)
 
-    self.State.Enabled = enabled == true
+    self.State.Enabled =
+        enabled == true
 
 
     if not self.State.Enabled then
 
         for player in pairs(self.Objects) do
-            self:Remove(player)
+            self:Hide(self.Objects[player])
         end
 
     end
@@ -371,7 +401,20 @@ function HealthOverlay:Start()
     end
 
 
+    --// Check Drawing API
+
+    if not Drawing or not Drawing.new then
+
+        warn(
+            "[HealthOverlay] Drawing API unavailable."
+        )
+
+        return
+    end
+
+
     self.State.Running = true
+
 
     self:Refresh()
 
@@ -382,13 +425,16 @@ function HealthOverlay:Start()
 
             self:Poll()
 
-            task.wait(self.PollInterval)
+            task.wait(
+                self.PollInterval
+            )
 
         end
 
     end)
 
 
+    print("[HealthOverlay] Drawing API detected.")
     print("[HealthOverlay] Started.")
 end
 
