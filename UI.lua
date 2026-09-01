@@ -1,204 +1,487 @@
 --// UI.lua
---// Gakuran Script - User Interface
+--// Gakuran UI Module
+
+local Config = require(script.Parent.Config)
 
 local UI = {}
 
-UI.State = nil
-UI.Config = nil
-UI.TargetManager = nil
-UI.ParryController = nil
-UI.AutoPlay = nil
+--------------------------------------------------
+--// State
+--------------------------------------------------
 
+UI.State = nil
 UI.Library = nil
 UI.Window = nil
-UI.Connections = {}
 
---==================================================
--- Initialization
---==================================================
+UI.Controls = {}
 
-function UI:Initialize(
-    State,
-    Config,
-    TargetManager,
-    ParryController,
-    AutoPlay
-)
+--------------------------------------------------
+--// Initialize
+--------------------------------------------------
+
+function UI:Initialize(State)
     self.State = State
-    self.Config = Config
-    self.TargetManager = TargetManager
-    self.ParryController = ParryController
-    self.AutoPlay = AutoPlay
+end
 
-    table.clear(self.Connections)
+--------------------------------------------------
+--// Load UI Library
+--------------------------------------------------
 
-    if not Config.UI or not Config.UI.Enabled then
+function UI:LoadLibrary()
+    if self.Library then
+        return self.Library
+    end
+
+    local success, result = pcall(function()
+        return loadstring(
+            game:HttpGet(
+                "https://raw.githubusercontent.com/artxficial/INS-ui/main/uilib.min.lua"
+            )
+        )()
+    end)
+
+    if not success then
+        warn(
+            "[UI] Failed to load UI library:",
+            result
+        )
+
+        return nil
+    end
+
+    self.Library = result
+
+    return self.Library
+end
+
+--------------------------------------------------
+--// Create Window
+--------------------------------------------------
+
+function UI:CreateWindow()
+    local Library = self:LoadLibrary()
+
+    if not Library then
+        return nil
+    end
+
+    --------------------------------------------------
+    -- IMPORTANT
+    -- The exact constructor depends on the UI library.
+    -- Keep the library-specific code here.
+    --------------------------------------------------
+
+    local success, window = pcall(function()
+
+        return Library:CreateWindow({
+            Title = "Gakuran",
+            Subtitle = "Combat Assistant",
+        })
+
+    end)
+
+    if not success then
+
+        warn(
+            "[UI] Failed to create window:",
+            window
+        )
+
+        return nil
+    end
+
+    self.Window = window
+
+    return window
+end
+
+--------------------------------------------------
+--// Add Toggle
+--------------------------------------------------
+
+function UI:AddToggle(
+    name,
+    defaultValue,
+    callback
+)
+    if not self.Window then
+        return nil
+    end
+
+    local success, control = pcall(function()
+
+        return self.Window:AddToggle(
+            name,
+            {
+                Default = defaultValue,
+                Callback = callback,
+            }
+        )
+
+    end)
+
+    if not success then
+
+        warn(
+            "[UI] Failed to create toggle:",
+            name,
+            control
+        )
+
+        return nil
+    end
+
+    self.Controls[name] = control
+
+    return control
+end
+
+--------------------------------------------------
+--// Add Slider
+--------------------------------------------------
+
+function UI:AddSlider(
+    name,
+    min,
+    max,
+    defaultValue,
+    callback
+)
+    if not self.Window then
+        return nil
+    end
+
+    local success, control = pcall(function()
+
+        return self.Window:AddSlider(
+            name,
+            {
+                Min = min,
+                Max = max,
+                Default = defaultValue,
+                Callback = callback,
+            }
+        )
+
+    end)
+
+    if not success then
+
+        warn(
+            "[UI] Failed to create slider:",
+            name,
+            control
+        )
+
+        return nil
+    end
+
+    self.Controls[name] = control
+
+    return control
+end
+
+--------------------------------------------------
+--// Add Button
+--------------------------------------------------
+
+function UI:AddButton(
+    name,
+    callback
+)
+    if not self.Window then
+        return nil
+    end
+
+    local success, control = pcall(function()
+
+        return self.Window:AddButton(
+            name,
+            callback
+        )
+
+    end)
+
+    if not success then
+
+        warn(
+            "[UI] Failed to create button:",
+            name,
+            control
+        )
+
+        return nil
+    end
+
+    self.Controls[name] = control
+
+    return control
+end
+
+--------------------------------------------------
+--// Build Main Controls
+--------------------------------------------------
+
+function UI:Build()
+    if not Config.UI.Enabled then
         return
     end
 
-    self:Create()
-end
+    if not self.Window then
+        self:CreateWindow()
+    end
 
---==================================================
--- Create UI
---==================================================
+    if not self.Window then
+        return
+    end
 
-function UI:Create()
-    -- Load your existing UI library here.
-    --
-    -- Example:
-    --
-    -- local Library = ...
-    -- self.Library = Library
-    --
-    -- self.Window = Library:CreateWindow({
-    --     Title = "Gakuran"
-    -- })
+    --------------------------------------------------
+    -- Parry
+    --------------------------------------------------
 
-    self:CreateTabs()
-end
+    self:AddToggle(
+        "Parry",
+        Config.Parry.Enabled,
+        function(value)
 
---==================================================
--- Create Tabs
---==================================================
+            Config.Parry.Enabled = value
 
-function UI:CreateTabs()
-    -- Create your UI tabs here.
-    --
-    -- Suggested layout:
-    --
-    -- Main
-    -- ├── Enable / Disable
-    -- ├── Reaction Time
-    -- └── Parry Window
-    --
-    -- Target
-    -- ├── Target Selection
-    -- ├── Cycle Target
-    -- └── Max Distance
-    --
+            if self.OnParryToggle then
+                self.OnParryToggle(value)
+            end
+
+        end
+    )
+
+    self:AddSlider(
+        "Reaction Time",
+        0,
+        1,
+        Config.Parry.ReactionTime,
+        function(value)
+
+            Config.Parry.ReactionTime =
+                value
+
+        end
+    )
+
+    self:AddSlider(
+        "Parry Window",
+        0,
+        1,
+        Config.Parry.ParryWindow,
+        function(value)
+
+            Config.Parry.ParryWindow =
+                value
+
+        end
+    )
+
+    --------------------------------------------------
+    -- Targeting
+    --------------------------------------------------
+
+    self:AddToggle(
+        "Multiple Targets",
+        Config.Targeting.MultipleTargets,
+        function(value)
+
+            Config.Targeting.MultipleTargets =
+                value
+
+        end
+    )
+
+    self:AddToggle(
+        "Cycle Targets",
+        Config.Targeting.CycleTargets,
+        function(value)
+
+            Config.Targeting.CycleTargets =
+                value
+
+        end
+    )
+
+    self:AddSlider(
+        "Target Distance",
+        1,
+        1000,
+        Config.Targeting.MaxDistance,
+        function(value)
+
+            Config.Targeting.MaxDistance =
+                value
+
+        end
+    )
+
+    --------------------------------------------------
     -- ESP
-    -- ├── ESP Enabled
-    -- ├── Health
-    -- ├── Name
-    -- └── Distance
-    --
-    -- Auto Play
-    -- ├── Enable
-    -- └── Input Delay
-    --
-    -- Animations
-    -- ├── Animation Logger
-    -- └── Animation Cache
+    --------------------------------------------------
+
+    self:AddToggle(
+        "ESP",
+        Config.ESP.Enabled,
+        function(value)
+
+            Config.ESP.Enabled =
+                value
+
+        end
+    )
+
+    self:AddToggle(
+        "Health ESP",
+        Config.ESP.ShowHealth,
+        function(value)
+
+            Config.ESP.ShowHealth =
+                value
+
+        end
+    )
+
+    self:AddToggle(
+        "Name ESP",
+        Config.ESP.ShowName,
+        function(value)
+
+            Config.ESP.ShowName =
+                value
+
+        end
+    )
+
+    self:AddToggle(
+        "Distance ESP",
+        Config.ESP.ShowDistance,
+        function(value)
+
+            Config.ESP.ShowDistance =
+                value
+
+        end
+    )
+
+    self:AddToggle(
+        "Target ESP",
+        Config.ESP.ShowTarget,
+        function(value)
+
+            Config.ESP.ShowTarget =
+                value
+
+        end
+    )
+
+    --------------------------------------------------
+    -- Animation Tracker
+    --------------------------------------------------
+
+    self:AddToggle(
+        "Animation Tracker",
+        Config.AnimationTracker.Enabled,
+        function(value)
+
+            Config.AnimationTracker.Enabled =
+                value
+
+        end
+    )
+
+    self:AddToggle(
+        "Log Animations",
+        Config.AnimationTracker.LogAnimations,
+        function(value)
+
+            Config.AnimationTracker.LogAnimations =
+                value
+
+        end
+    )
+
+    --------------------------------------------------
+    -- AutoPlay
+    --------------------------------------------------
+
+    self:AddToggle(
+        "AutoPlay",
+        Config.AutoPlay.Enabled,
+        function(value)
+
+            Config.AutoPlay.Enabled =
+                value
+
+            if self.OnAutoPlayToggle then
+                self.OnAutoPlayToggle(value)
+            end
+
+        end
+    )
+
+    --------------------------------------------------
+    -- Logging Buttons
+    --------------------------------------------------
+
+    self:AddButton(
+        "Clear Animation Cache",
+        function()
+
+            if self.OnClearAnimationCache then
+                self.OnClearAnimationCache()
+            end
+
+        end
+    )
+
+    self:AddButton(
+        "Clear Damage Log",
+        function()
+
+            if self.OnClearDamageLog then
+                self.OnClearDamageLog()
+            end
+
+        end
+    )
 end
 
---==================================================
--- Parry Controls
---==================================================
+--------------------------------------------------
+--// Start
+--------------------------------------------------
 
-function UI:SetParryEnabled(enabled)
-    if not self.Config or not self.Config.Parry then
+function UI:Start()
+    if not Config.UI.Enabled then
         return
     end
 
-    self.Config.Parry.Enabled = enabled == true
+    self:CreateWindow()
+    self:Build()
 end
 
-function UI:SetReactionTime(value)
-    if not self.Config or not self.Config.Parry then
-        return
-    end
-
-    self.Config.Parry.ReactionTime = tonumber(value) or 0
-end
-
---==================================================
--- Target Controls
---==================================================
-
-function UI:RefreshTargets()
-    if not self.TargetManager then
-        return
-    end
-
-    self.TargetManager:Refresh()
-end
-
-function UI:NextTarget()
-    if not self.TargetManager then
-        return nil
-    end
-
-    return self.TargetManager:CycleNext()
-end
-
-function UI:PreviousTarget()
-    if not self.TargetManager then
-        return nil
-    end
-
-    return self.TargetManager:CyclePrevious()
-end
-
---==================================================
--- Auto Play Controls
---==================================================
-
-function UI:SetAutoPlayEnabled(enabled)
-    if not self.AutoPlay then
-        return
-    end
-
-    self.AutoPlay:SetEnabled(enabled)
-
-    if enabled then
-        self.AutoPlay:Start()
-    else
-        self.AutoPlay:Stop()
-    end
-end
-
---==================================================
--- Config Controls
---==================================================
-
-function UI:SaveConfig()
-    -- Connect this to your existing config
-    -- save system.
-end
-
-function UI:LoadConfig()
-    -- Connect this to your existing config
-    -- load system.
-end
-
---==================================================
--- Destroy
---==================================================
+--------------------------------------------------
+--// Destroy
+--------------------------------------------------
 
 function UI:Destroy()
-    for _, connection in ipairs(self.Connections) do
-        pcall(function()
-            connection:Disconnect()
-        end)
-    end
-
-    table.clear(self.Connections)
+    self.Controls = {}
 
     if self.Window then
+
         pcall(function()
-            self.Window:Destroy()
+
+            if self.Window.Destroy then
+                self.Window:Destroy()
+            end
+
         end)
+
     end
 
     self.Window = nil
-    self.Library = nil
-
-    self.State = nil
-    self.Config = nil
-    self.TargetManager = nil
-    self.ParryController = nil
-    self.AutoPlay = nil
 end
 
 return UI
