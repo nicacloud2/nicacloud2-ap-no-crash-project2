@@ -1,10 +1,12 @@
 --// =========================================================
 --// GAKURAN SYSTEM - MAIN LOADER
 --// GitHub + Matcha Compatible
+--// Polling-Safe Edition
 --// =========================================================
 
 local BASE_URL =
     "https://raw.githubusercontent.com/nicacloud2/nicacloud2-ap-no-crash-project2/main/"
+
 
 local MODULES = {
     "Config",
@@ -19,52 +21,9 @@ local MODULES = {
     "UI"
 }
 
+
 local LoadedModules = {}
 
---// =========================================================
---// SAFE CONNECT
---// =========================================================
-
-local function SafeConnect(signal, callback, name)
-
-    if not signal then
-        warn(
-            "[Main] " ..
-            tostring(name) ..
-            " is unavailable."
-        )
-
-        return nil
-    end
-
-    if type(signal.Connect) ~= "function" then
-        warn(
-            "[Main] " ..
-            tostring(name) ..
-            " does not support :Connect()."
-        )
-
-        return nil
-    end
-
-    local success, connection =
-        pcall(function()
-            return signal:Connect(callback)
-        end)
-
-    if not success then
-        warn(
-            "[Main] Failed to connect " ..
-            tostring(name) ..
-            ": " ..
-            tostring(connection)
-        )
-
-        return nil
-    end
-
-    return connection
-end
 
 --// =========================================================
 --// HEADER
@@ -76,6 +35,7 @@ print("========================================")
 print("[Main] Loading modules...")
 print("")
 
+
 --// =========================================================
 --// LOAD MODULE
 --// =========================================================
@@ -86,15 +46,28 @@ local function LoadModule(moduleName)
     print("----------------------------------------")
     print("[Main] Downloading: " .. moduleName)
 
-    local url = BASE_URL .. moduleName .. ".lua"
+
+    local url =
+        BASE_URL .. moduleName .. ".lua"
+
 
     print("[Main] URL: " .. url)
 
-    local success, source = pcall(function()
-        return game:HttpGet(url)
-    end)
+
+    --// -----------------------------------------------------
+    --// DOWNLOAD
+    --// -----------------------------------------------------
+
+    local success, source =
+        pcall(function()
+
+            return game:HttpGet(url)
+
+        end)
+
 
     if not success then
+
         warn(
             "[Main] Failed to download " ..
             moduleName
@@ -103,28 +76,38 @@ local function LoadModule(moduleName)
         warn(tostring(source))
 
         return nil
+
     end
 
+
     if not source or source == "" then
+
         warn(
             "[Main] Empty source: " ..
             moduleName
         )
 
         return nil
+
     end
+
 
     print(
         "[Main] Source length: " ..
         tostring(#source)
     )
 
+
     print(
         "[Main] Source preview: " ..
         string.sub(source, 1, 120)
     )
 
-    -- GitHub error detection
+
+    --// -----------------------------------------------------
+    --// GITHUB ERROR DETECTION
+    --// -----------------------------------------------------
+
     if source == "404: Not Found"
         or source:find("^404")
         or source:find("Not Found")
@@ -136,18 +119,42 @@ local function LoadModule(moduleName)
         )
 
         return nil
+
     end
 
-    --// =====================================================
-    --// MATCHA RETURN FIX
-    --// =====================================================
+
+    --// -----------------------------------------------------
+    --// CLEAR OLD RESULT
+    --// -----------------------------------------------------
+
+    _G.__GakuranModuleResult = nil
+
+
+    --// -----------------------------------------------------
+    --// MATCHA MODULE RETURN CONVERSION
+    --// -----------------------------------------------------
+
+    --// Modules can use:
+    --
+    --// return Module
+    --
+    --// OR:
+    --
+    --// _G.__GakuranModuleResult = Module
+    --
+    --// We support both.
+
 
     local returnPattern =
-        "return%s+" .. moduleName .. "%s*$"
+        "return%s+" ..
+        moduleName ..
+        "%s*$"
+
 
     local replacement =
         "_G.__GakuranModuleResult = " ..
         moduleName
+
 
     local modifiedSource, replacementCount =
         source:gsub(
@@ -156,26 +163,74 @@ local function LoadModule(moduleName)
             1
         )
 
-    if replacementCount == 0 then
 
-        warn(
-            "[Main] Could not find final return statement for " ..
+    if replacementCount > 0 then
+
+        print(
+            "[Main] Converted return statement for " ..
             moduleName
         )
 
-        return nil
+    else
+
+        --// Already Matcha-compatible?
+
+        if source:match(
+            "_G%.__GakuranModuleResult%s*="
+        ) then
+
+            print(
+                "[Main] " ..
+                moduleName ..
+                " already uses Matcha module result."
+            )
+
+            modifiedSource = source
+
+        else
+
+            warn(
+                "[Main] No module return found for " ..
+                moduleName
+            )
+
+            warn(
+                "[Main] Expected either:"
+            )
+
+            warn(
+                "        return " ..
+                moduleName
+            )
+
+            warn(
+                "        OR _G.__GakuranModuleResult = " ..
+                moduleName
+            )
+
+            return nil
+
+        end
+
     end
 
-    _G.__GakuranModuleResult = nil
 
-    -- Compile
+    --// -----------------------------------------------------
+    --// COMPILE
+    --// -----------------------------------------------------
+
     print(
         "[Main] Compiling: " ..
         moduleName
     )
 
+
     local compileSuccess, chunk =
-        pcall(loadstring, modifiedSource)
+        pcall(
+            loadstring,
+            modifiedSource
+        )
+
 
     if not compileSuccess or not chunk then
 
@@ -187,21 +242,29 @@ local function LoadModule(moduleName)
         warn(tostring(chunk))
 
         return nil
+
     end
+
 
     print(
         "[Main] Compilation successful: " ..
         moduleName
     )
 
-    -- Execute
+
+    --// -----------------------------------------------------
+    --// EXECUTE
+    --// -----------------------------------------------------
+
     print(
         "[Main] Executing: " ..
         moduleName
     )
 
+
     local executeSuccess, executeResult =
         pcall(chunk)
+
 
     if not executeSuccess then
 
@@ -210,27 +273,39 @@ local function LoadModule(moduleName)
             moduleName
         )
 
-        warn(tostring(executeResult))
+        warn(
+            tostring(executeResult)
+        )
 
         _G.__GakuranModuleResult = nil
 
         return nil
+
     end
+
+
+    --// -----------------------------------------------------
+    --// GET MODULE RESULT
+    --// -----------------------------------------------------
 
     local result =
         _G.__GakuranModuleResult
 
+
     _G.__GakuranModuleResult = nil
+
 
     print(
         "[Main] Chunk return type: " ..
         tostring(type(executeResult))
     )
 
+
     print(
         "[Main] Module result type: " ..
         tostring(type(result))
     )
+
 
     if result == nil then
 
@@ -241,7 +316,9 @@ local function LoadModule(moduleName)
         )
 
         return nil
+
     end
+
 
     if type(result) ~= "table" then
 
@@ -253,19 +330,27 @@ local function LoadModule(moduleName)
         )
 
         return nil
+
     end
 
-    LoadedModules[moduleName] = result
+
+    LoadedModules[moduleName] =
+        result
+
 
     print(
         "[Main] Loaded successfully: " ..
         moduleName
     )
 
+
     print("----------------------------------------")
 
+
     return result
+
 end
+
 
 --// =========================================================
 --// CONFIG
@@ -274,14 +359,21 @@ end
 local Config =
     LoadModule("Config")
 
+
 if not Config then
-    error("[Main] Config failed to load.")
+
+    error(
+        "[Main] Config failed to load."
+    )
+
 end
+
 
 print(
     "[Main] Config check: " ..
     tostring(type(Config))
 )
+
 
 --// =========================================================
 --// ANIMATION DATABASE
@@ -290,39 +382,67 @@ print(
 local AnimationDatabase =
     LoadModule("AnimationDatabase")
 
+
 if not AnimationDatabase then
+
     error(
         "[Main] AnimationDatabase failed to load."
     )
+
 end
+
 
 print(
     "[Main] AnimationDatabase check: " ..
     tostring(type(AnimationDatabase))
 )
 
+
 print("")
 print("[Main] Initializing AnimationDatabase...")
+
 
 local success, err =
     pcall(function()
 
-        AnimationDatabase:SetConfig(Config)
+        if type(AnimationDatabase.SetConfig) ==
+            "function"
+        then
 
-        AnimationDatabase:Initialize(Config)
+            AnimationDatabase:SetConfig(
+                Config
+            )
+
+        end
+
+
+        if type(AnimationDatabase.Initialize) ==
+            "function"
+        then
+
+            AnimationDatabase:Initialize(
+                Config
+            )
+
+        end
 
     end)
 
+
 if not success then
+
     error(
         "[Main] AnimationDatabase initialization failed: " ..
         tostring(err)
     )
+
 end
+
 
 print(
     "[Main] AnimationDatabase initialized."
 )
+
 
 --// =========================================================
 --// ANIMATION TRACKER
@@ -331,20 +451,32 @@ print(
 local AnimationTracker =
     LoadModule("AnimationTracker")
 
+
 if not AnimationTracker then
+
     error(
         "[Main] AnimationTracker failed to load."
     )
+
 end
 
-AnimationTracker:SetDependencies(
-    Config,
-    AnimationDatabase
-)
+
+if type(AnimationTracker.SetDependencies) ==
+    "function"
+then
+
+    AnimationTracker:SetDependencies(
+        Config,
+        AnimationDatabase
+    )
+
+end
+
 
 print(
     "[Main] AnimationTracker dependencies set."
 )
+
 
 --// =========================================================
 --// TARGET MANAGER
@@ -353,17 +485,31 @@ print(
 local TargetManager =
     LoadModule("TargetManager")
 
+
 if not TargetManager then
+
     error(
         "[Main] TargetManager failed to load."
     )
+
 end
 
-TargetManager:SetConfig(Config)
+
+if type(TargetManager.SetConfig) ==
+    "function"
+then
+
+    TargetManager:SetConfig(
+        Config
+    )
+
+end
+
 
 print(
     "[Main] TargetManager config set."
 )
+
 
 --// =========================================================
 --// PARRY CONTROLLER
@@ -372,22 +518,34 @@ print(
 local ParryController =
     LoadModule("ParryController")
 
+
 if not ParryController then
+
     error(
         "[Main] ParryController failed to load."
     )
+
 end
 
-ParryController:SetDependencies(
-    Config,
-    AnimationDatabase,
-    AnimationTracker,
-    TargetManager
-)
+
+if type(ParryController.SetDependencies) ==
+    "function"
+then
+
+    ParryController:SetDependencies(
+        Config,
+        AnimationDatabase,
+        AnimationTracker,
+        TargetManager
+    )
+
+end
+
 
 print(
     "[Main] ParryController dependencies set."
 )
+
 
 --// =========================================================
 --// LOGGER
@@ -396,21 +554,33 @@ print(
 local Logger =
     LoadModule("Logger")
 
+
 if not Logger then
+
     error(
         "[Main] Logger failed to load."
     )
+
 end
 
-Logger:SetDependencies(
-    Config,
-    AnimationDatabase,
-    AnimationTracker
-)
+
+if type(Logger.SetDependencies) ==
+    "function"
+then
+
+    Logger:SetDependencies(
+        Config,
+        AnimationDatabase,
+        AnimationTracker
+    )
+
+end
+
 
 print(
     "[Main] Logger dependencies set."
 )
+
 
 --// =========================================================
 --// ESP
@@ -419,18 +589,32 @@ print(
 local ESP =
     LoadModule("ESP")
 
+
 if not ESP then
-    error("[Main] ESP failed to load.")
+
+    error(
+        "[Main] ESP failed to load."
+    )
+
 end
 
-ESP:SetDependencies(
-    Config,
-    TargetManager
-)
+
+if type(ESP.SetDependencies) ==
+    "function"
+then
+
+    ESP:SetDependencies(
+        Config,
+        TargetManager
+    )
+
+end
+
 
 print(
     "[Main] ESP dependencies set."
 )
+
 
 --// =========================================================
 --// HEALTH OVERLAY
@@ -439,20 +623,32 @@ print(
 local HealthOverlay =
     LoadModule("HealthOverlay")
 
+
 if not HealthOverlay then
+
     error(
         "[Main] HealthOverlay failed to load."
     )
+
 end
 
-HealthOverlay:SetDependencies(
-    Config,
-    TargetManager
-)
+
+if type(HealthOverlay.SetDependencies) ==
+    "function"
+then
+
+    HealthOverlay:SetDependencies(
+        Config,
+        TargetManager
+    )
+
+end
+
 
 print(
     "[Main] HealthOverlay dependencies set."
 )
+
 
 --// =========================================================
 --// AUTOPLAY
@@ -461,19 +657,33 @@ print(
 local AutoPlay =
     LoadModule("AutoPlay")
 
+
 if not AutoPlay then
-    error("[Main] AutoPlay failed to load.")
+
+    error(
+        "[Main] AutoPlay failed to load."
+    )
+
 end
 
-AutoPlay:SetDependencies(
-    Config,
-    TargetManager,
-    ParryController
-)
+
+if type(AutoPlay.SetDependencies) ==
+    "function"
+then
+
+    AutoPlay:SetDependencies(
+        Config,
+        TargetManager,
+        ParryController
+    )
+
+end
+
 
 print(
     "[Main] AutoPlay dependencies set."
 )
+
 
 --// =========================================================
 --// UI
@@ -482,23 +692,37 @@ print(
 local UI =
     LoadModule("UI")
 
+
 if not UI then
-    error("[Main] UI failed to load.")
+
+    error(
+        "[Main] UI failed to load."
+    )
+
 end
 
-UI:SetDependencies(
-    Config,
-    TargetManager,
-    ParryController,
-    ESP,
-    HealthOverlay,
-    AutoPlay,
-    Logger
-)
+
+if type(UI.SetDependencies) ==
+    "function"
+then
+
+    UI:SetDependencies(
+        Config,
+        TargetManager,
+        ParryController,
+        ESP,
+        HealthOverlay,
+        AutoPlay,
+        Logger
+    )
+
+end
+
 
 print(
     "[Main] UI dependencies set."
 )
+
 
 --// =========================================================
 --// INITIALIZATION
@@ -509,9 +733,14 @@ print("========================================")
 print("        INITIALIZING GAKURAN")
 print("========================================")
 
-local function SafeInitialize(name, module)
+
+local function SafeInitialize(
+    name,
+    module
+)
 
     if not module then
+
         warn(
             "[Main] " ..
             name ..
@@ -519,7 +748,9 @@ local function SafeInitialize(name, module)
         )
 
         return false
+
     end
+
 
     if type(module.Initialize) ~= "function" then
 
@@ -530,12 +761,17 @@ local function SafeInitialize(name, module)
         )
 
         return true
+
     end
+
 
     local ok, initializeError =
         pcall(function()
+
             module:Initialize()
+
         end)
+
 
     if not ok then
 
@@ -550,55 +786,68 @@ local function SafeInitialize(name, module)
         )
 
         return false
+
     end
+
 
     print(
         "[Main] Initialized: " ..
         name
     )
 
+
     return true
+
 end
+
 
 SafeInitialize(
     "AnimationTracker",
     AnimationTracker
 )
 
+
 SafeInitialize(
     "TargetManager",
     TargetManager
 )
+
 
 SafeInitialize(
     "ParryController",
     ParryController
 )
 
+
 SafeInitialize(
     "Logger",
     Logger
 )
+
 
 SafeInitialize(
     "ESP",
     ESP
 )
 
+
 SafeInitialize(
     "HealthOverlay",
     HealthOverlay
 )
+
 
 SafeInitialize(
     "AutoPlay",
     AutoPlay
 )
 
+
 SafeInitialize(
     "UI",
     UI
 )
+
 
 --// =========================================================
 --// START SYSTEMS
@@ -609,11 +858,16 @@ print("========================================")
 print("          STARTING SYSTEMS")
 print("========================================")
 
-local function SafeStart(name, module)
+
+local function SafeStart(
+    name,
+    module
+)
 
     if not module then
         return false
     end
+
 
     if type(module.Start) ~= "function" then
 
@@ -624,12 +878,17 @@ local function SafeStart(name, module)
         )
 
         return true
+
     end
+
 
     local ok, startError =
         pcall(function()
+
             module:Start()
+
         end)
+
 
     if not ok then
 
@@ -644,231 +903,97 @@ local function SafeStart(name, module)
         )
 
         return false
+
     end
+
 
     print(
         "[Main] Started: " ..
         name
     )
 
+
     return true
+
 end
+
 
 SafeStart(
     "AnimationTracker",
     AnimationTracker
 )
 
+
 SafeStart(
     "TargetManager",
     TargetManager
 )
+
 
 SafeStart(
     "ParryController",
     ParryController
 )
 
+
 SafeStart(
     "Logger",
     Logger
 )
+
 
 SafeStart(
     "ESP",
     ESP
 )
 
+
 SafeStart(
     "HealthOverlay",
     HealthOverlay
 )
+
 
 SafeStart(
     "AutoPlay",
     AutoPlay
 )
 
+
 --// =========================================================
 --// INPUT
 --// =========================================================
 
-local UserInputService
+--// Input is intentionally NOT connected here.
+--//
+--// Matcha may not expose:
+--//
+--// UserInputService.InputBegan
+--// UserInputService.InputEnded
+--//
+--// so Main.lua will not create those connections.
+--//
+--// UI/input support can be handled separately.
 
-local inputServiceSuccess, inputService =
-    pcall(function()
-        return game:GetService(
-            "UserInputService"
-        )
-    end)
 
-if inputServiceSuccess then
-    UserInputService = inputService
-end
+print(
+    "[Main] Input event connections skipped for Matcha compatibility."
+)
 
-local InputConnection
-local InputReleaseConnection
-
-if UserInputService then
-
-    InputConnection = SafeConnect(
-        UserInputService.InputBegan,
-        function(input, gameProcessed)
-
-            if gameProcessed then
-                return
-            end
-
-            -- RightShift = UI
-            if input.KeyCode ==
-                Enum.KeyCode.RightShift
-            then
-
-                if UI and
-                    type(UI.Toggle) == "function"
-                then
-
-                    pcall(function()
-                        UI:Toggle()
-                    end)
-
-                end
-
-            end
-
-            -- X = Dodge
-            if input.KeyCode ==
-                Enum.KeyCode.X
-            then
-
-                if ParryController and
-                    type(ParryController.Dodge) == "function"
-                then
-
-                    pcall(function()
-                        ParryController:Dodge()
-                    end)
-
-                end
-
-            end
-
-            -- F = Block
-            if input.KeyCode ==
-                Enum.KeyCode.F
-            then
-
-                if ParryController and
-                    type(ParryController.BlockStart) == "function"
-                then
-
-                    pcall(function()
-                        ParryController:BlockStart()
-                    end)
-
-                end
-
-            end
-
-        end,
-        "UserInputService.InputBegan"
-    )
-
-    InputReleaseConnection = SafeConnect(
-        UserInputService.InputEnded,
-        function(input)
-
-            if input.KeyCode ==
-                Enum.KeyCode.F
-            then
-
-                if ParryController and
-                    type(ParryController.BlockEnd) == "function"
-                then
-
-                    pcall(function()
-                        ParryController:BlockEnd()
-                    end)
-
-                end
-
-            end
-
-        end,
-        "UserInputService.InputEnded"
-    )
-
-else
-
-    warn(
-        "[Main] UserInputService unavailable."
-    )
-
-end
 
 --// =========================================================
 --// CHARACTER
 --// =========================================================
 
-local Players
+--// CharacterAdded is also intentionally not connected.
+--//
+--// AnimationTracker now watches characters through polling.
 
-local playersSuccess, playersService =
-    pcall(function()
-        return game:GetService("Players")
-    end)
 
-if playersSuccess then
-    Players = playersService
-end
+print(
+    "[Main] Character event connections skipped."
+)
 
-local LocalPlayer
-
-if Players then
-    LocalPlayer = Players.LocalPlayer
-end
-
-local CharacterConnection
-
-if LocalPlayer then
-
-    CharacterConnection = SafeConnect(
-        LocalPlayer.CharacterAdded,
-        function(character)
-
-            print(
-                "[Main] Character loaded: " ..
-                tostring(character.Name)
-            )
-
-            task.wait(0.5)
-
-            if AnimationTracker and
-                type(AnimationTracker.RefreshLocalPlayer) ==
-                "function"
-            then
-
-                pcall(function()
-                    AnimationTracker:RefreshLocalPlayer()
-                end)
-
-            end
-
-            if TargetManager and
-                type(TargetManager.Refresh) ==
-                "function"
-            then
-
-                pcall(function()
-                    TargetManager:Refresh()
-                end)
-
-            end
-
-        end,
-        "LocalPlayer.CharacterAdded"
-    )
-
-end
 
 --// =========================================================
 --// GLOBAL
@@ -910,6 +1035,7 @@ _G.Gakuran = {
 
 }
 
+
 --// =========================================================
 --// FINAL
 --// =========================================================
@@ -919,54 +1045,65 @@ print("========================================")
 print("       GAKURAN SYSTEM READY")
 print("========================================")
 
+
 print(
     "[Main] Config: " ..
     tostring(type(Config))
 )
+
 
 print(
     "[Main] AnimationDatabase: " ..
     tostring(type(AnimationDatabase))
 )
 
+
 print(
     "[Main] AnimationTracker: " ..
     tostring(type(AnimationTracker))
 )
+
 
 print(
     "[Main] TargetManager: " ..
     tostring(type(TargetManager))
 )
 
+
 print(
     "[Main] ParryController: " ..
     tostring(type(ParryController))
 )
+
 
 print(
     "[Main] Logger: " ..
     tostring(type(Logger))
 )
 
+
 print(
     "[Main] ESP: " ..
     tostring(type(ESP))
 )
+
 
 print(
     "[Main] HealthOverlay: " ..
     tostring(type(HealthOverlay))
 )
 
+
 print(
     "[Main] AutoPlay: " ..
     tostring(type(AutoPlay))
 )
 
+
 print(
     "[Main] UI: " ..
     tostring(type(UI))
 )
+
 
 print("========================================")
