@@ -2,6 +2,8 @@
 --// GAKURAN - CONFIG
 --// =========================================================
 
+print("[Config] FILE EXECUTED")
+
 local Config = {}
 
 --// =========================================================
@@ -125,24 +127,6 @@ Config.IgnoreIds = {
 --// =========================================================
 --// ANIMATION DATABASE
 --// =========================================================
---// Add your animation data below.
---
---// Structure:
---
---// StyleName = {
---//
---//     M1Time = 0.6,
---//
---//     ["rbxassetid://123"] = {
---//         DisplayName = "M1",
---//         ReactionTime = 0.1
---//     }
---//
---// }
---
---// If ReactionTime is missing, the default reaction time
---// will be used.
---// =========================================================
 
 Config.GameConfig = {
 
@@ -174,7 +158,7 @@ Config.GameConfig = {
         M1Time = 0.6,
 
         -- Correct Hakari animation ID
-        -- rbX asset: 82855179231529
+        -- rbxassetid://82855179231529
     },
 
     CapoeiraAnims = {
@@ -248,6 +232,17 @@ function Config:GetTargetRange()
     return self.Targeting.MaxDistance
 
 end
+
+
+--// =========================================================
+--// FINAL TEST
+--// =========================================================
+
+print("[Config] About to return Config")
+print("[Config] Config type:", type(Config))
+print("[Config] Debug:", Config.Debug)
+print("[Config] Parry range:", Config.Parry.MaxDistance)
+print("[Config] Target range:", Config.Targeting.MaxDistance)
 
 
 --// =========================================================
