@@ -22,6 +22,7 @@ UI.State = {
 }
 
 UI.PollInterval = 0.1
+UI.MatchaUI = nil
 
 --// =========================================================
 --// DEPENDENCIES
@@ -60,14 +61,191 @@ function UI:Initialize(state)
 end
 
 --// =========================================================
---// SAFE VALUE
+--// FIND MATCHA UI API
 --// =========================================================
 
-function UI:GetValue(id, default)
+function UI:FindMatchaUI()
+
+    print("[UI] Searching for Matcha UI API...")
+
+    local candidates = {
+        rawget(_G, "UI"),
+        rawget(_G, "ui"),
+        rawget(_G, "Menu"),
+        rawget(_G, "menu"),
+        rawget(_G, "Library"),
+        rawget(_G, "library"),
+        rawget(_G, "MatchaUI"),
+        rawget(_G, "Matcha")
+    }
+
+    for _, candidate in ipairs(candidates) do
+
+        if candidate
+            and type(candidate) == "table" then
+
+            if type(candidate.AddTab) == "function" then
+
+                print("[UI] Matcha UI API found.")
+
+                return candidate
+
+            end
+
+        end
+
+    end
+
+    warn("[UI] Matcha UI API was not found.")
+
+    return nil
+
+end
+
+--// =========================================================
+--// CREATE INTERFACE
+--// =========================================================
+
+function UI:CreateInterface()
+
+    local matchaUI = self:FindMatchaUI()
+
+    if not matchaUI then
+
+        warn(
+            "[UI] Cannot create interface:"
+            .. " Matcha UI Binding unavailable."
+        )
+
+        return false
+
+    end
+
+    self.MatchaUI = matchaUI
+
+    print("[UI] Creating Gakuran tab...")
+
+    local success, result = pcall(function()
+
+        return matchaUI.AddTab(
+            "Gakuran",
+            function(tab)
+
+                --// STATUS
+                local status =
+                    tab:Section(
+                        "Status",
+                        "Left"
+                    )
+
+                status:Label(
+                    "Gakuran Matcha Interface"
+                )
+
+                status:Label(
+                    "System: Running"
+                )
+
+                status:Label(
+                    "Target: Automatic"
+                )
+
+                --// CONTROLS
+                local controls =
+                    tab:Section(
+                        "Controls",
+                        "Left"
+                    )
+
+                controls:Toggle(
+                    "gakuran_enabled",
+                    "Enabled"
+                )
+
+                --// FEATURES
+                local features =
+                    tab:Section(
+                        "Features",
+                        "Right"
+                    )
+
+                features:Toggle(
+                    "gakuran_autoplay",
+                    "AutoPlay"
+                )
+
+                features:Toggle(
+                    "gakuran_esp",
+                    "ESP"
+                )
+
+                features:Toggle(
+                    "gakuran_health",
+                    "Health Overlay"
+                )
+
+                --// INFORMATION
+                local information =
+                    tab:Section(
+                        "Information",
+                        "Right"
+                    )
+
+                information:Label(
+                    "GAKURAN"
+                )
+
+                information:Label(
+                    "Matcha Native Interface"
+                )
+
+                information:Label(
+                    "Modules: Loaded"
+                )
+
+            end
+        )
+
+    end)
+
+    if not success then
+
+        warn(
+            "[UI] Matcha UI creation failed:"
+            .. tostring(result)
+        )
+
+        self.MatchaUI = nil
+
+        return false
+
+    end
+
+    print("[UI] Gakuran tab created.")
+
+    return true
+
+end
+
+--// =========================================================
+--// GET VALUE
+--// =========================================================
+
+function UI:GetSetting(id, default)
+
+    local matchaUI = self.MatchaUI
+
+    if not matchaUI then
+        return default
+    end
+
+    if type(matchaUI.GetValue) ~= "function" then
+        return default
+    end
 
     local success, value = pcall(function()
 
-        return UI.GetValue(id)
+        return matchaUI.GetValue(id)
 
     end)
 
@@ -76,120 +254,6 @@ function UI:GetValue(id, default)
     end
 
     return default
-
-end
-
---// =========================================================
---// CREATE MATCHA UI
---// =========================================================
-
-function UI:CreateInterface()
-
-    if not UI then
-        warn("[UI] UI library unavailable.")
-        return false
-    end
-
-    if type(UI.AddTab) ~= "function" then
-        warn("[UI] Matcha UI.AddTab unavailable.")
-        return false
-    end
-
-    print("[UI] Creating Matcha UI...")
-
-    UI.AddTab("Gakuran", function(tab)
-
-        --// =================================================
-        --// STATUS
-        --// =================================================
-
-        local status = tab:Section(
-            "Status",
-            "Left"
-        )
-
-        status:Label(
-            "Gakuran Matcha Interface"
-        )
-
-        status:Label(
-            "Status: Running"
-        )
-
-        status:Label(
-            "Target information is shown here."
-        )
-
-        --// =================================================
-        --// CONTROLS
-        --// =================================================
-
-        local controls = tab:Section(
-            "Controls",
-            "Left"
-        )
-
-        controls:Toggle(
-            "gakuran_ui_enabled",
-            "Enabled"
-        )
-
-        controls:Keybind(
-            "gakuran_ui_enabled_kb",
-            0x46,
-            "hold"
-        )
-
-        --// =================================================
-        --// FEATURES
-        --// =================================================
-
-        local features = tab:Section(
-            "Features",
-            "Right"
-        )
-
-        features:Toggle(
-            "gakuran_autoplay",
-            "AutoPlay"
-        )
-
-        features:Toggle(
-            "gakuran_esp",
-            "ESP"
-        )
-
-        features:Toggle(
-            "gakuran_health",
-            "Health Overlay"
-        )
-
-        --// =================================================
-        --// INFORMATION
-        --// =================================================
-
-        local information = tab:Section(
-            "Information",
-            "Right"
-        )
-
-        information:Label(
-            "Gakuran Project"
-        )
-
-        information:Label(
-            "Matcha Native UI"
-        )
-
-        information:Label(
-            "Modules loaded externally."
-        )
-
-    end)
-
-    print("[UI] Matcha UI created.")
-
-    return true
 
 end
 
@@ -203,35 +267,21 @@ function UI:Update()
         return
     end
 
-    --// Read UI values safely
-
+    --// Enabled
     local enabled =
-        self:GetValue(
-            "gakuran_ui_enabled",
-            true
-        )
-
-    local autoplay =
-        self:GetValue(
-            "gakuran_autoplay",
-            false
-        )
-
-    local esp =
-        self:GetValue(
-            "gakuran_esp",
-            true
-        )
-
-    local health =
-        self:GetValue(
-            "gakuran_health",
+        self:GetSetting(
+            "gakuran_enabled",
             true
         )
 
     self.State.Visible = enabled
 
-    --// AutoPlay state
+    --// AutoPlay
+    local autoplay =
+        self:GetSetting(
+            "gakuran_autoplay",
+            false
+        )
 
     if AutoPlay then
 
@@ -255,7 +305,12 @@ function UI:Update()
 
     end
 
-    --// ESP state
+    --// ESP
+    local esp =
+        self:GetSetting(
+            "gakuran_esp",
+            true
+        )
 
     if ESP then
 
@@ -279,7 +334,12 @@ function UI:Update()
 
     end
 
-    --// Health state
+    --// Health
+    local health =
+        self:GetSetting(
+            "gakuran_health",
+            true
+        )
 
     if HealthOverlay then
 
@@ -312,26 +372,28 @@ end
 function UI:Start()
 
     if self.State.Running then
+
         print("[UI] Already running.")
+
         return
+
     end
 
-    print("[UI] Starting...")
+    print("[UI] Creating interface...")
 
-    local success, result = pcall(function()
+    local success, result =
+        pcall(function()
 
-        return self:CreateInterface()
+            return self:CreateInterface()
 
-    end)
+        end)
 
     if not success then
 
         warn(
-            "[UI] UI creation error:",
-            tostring(result)
+            "[UI] Interface error:"
+            .. tostring(result)
         )
-
-        self.State.Running = false
 
         return
 
@@ -339,9 +401,9 @@ function UI:Start()
 
     if not result then
 
-        warn("[UI] Interface creation FAILED.")
-
-        self.State.Running = false
+        warn(
+            "[UI] Interface creation FAILED."
+        )
 
         return
 
@@ -349,7 +411,9 @@ function UI:Start()
 
     self.State.Running = true
 
-    print("[UI] Interface creation SUCCESS.")
+    print(
+        "[UI] Interface creation SUCCESS."
+    )
 
     task.spawn(function()
 
@@ -385,20 +449,29 @@ function UI:Stop()
 
     self.State.Running = false
 
-    pcall(function()
+    local matchaUI = self.MatchaUI
 
-        UI.RemoveTab(
-            "Gakuran"
-        )
+    if matchaUI
+        and type(matchaUI.RemoveTab) == "function" then
 
-    end)
+        pcall(function()
+
+            matchaUI.RemoveTab(
+                "Gakuran"
+            )
+
+        end)
+
+    end
+
+    self.MatchaUI = nil
 
     print("[UI] Stopped.")
 
 end
 
 --// =========================================================
---// FINAL MODULE RESULT
+--// MODULE RESULT
 --// =========================================================
 
 _G.__GakuranModuleResult = UI
