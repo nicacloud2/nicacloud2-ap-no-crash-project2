@@ -28,7 +28,14 @@ local function LoadModule(moduleName)
     print("----------------------------------------")
     print("[Main] Downloading: " .. moduleName)
 
-    local url = BASE_URL .. moduleName .. ".lua"
+    --// Cache buster
+    local cacheBust = tostring(os.time()) .. "_" .. moduleName
+
+    local url =
+        BASE_URL ..
+        moduleName ..
+        ".lua?v=" ..
+        cacheBust
 
     print("[Main] URL: " .. url)
 
@@ -690,7 +697,9 @@ SafeStart(
     AutoPlay
 )
 
+
 --// UI START
+
 print("[Main] >>> UI START BLOCK REACHED <<<")
 
 SafeStart(
