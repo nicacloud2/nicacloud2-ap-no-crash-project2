@@ -1,4 +1,3 @@
-```lua
 --// =========================================================
 --// GAKURAN - HEALTH OVERLAY
 --// GitHub / Matcha Version
@@ -472,4 +471,3 @@ end
 --// =========================================================
 
 _G.__GakuranModuleResult = HealthOverlay
-```
