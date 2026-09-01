@@ -27,46 +27,75 @@ local State = {
 
 local function LoadModule(moduleName)
 
-    if Modules[moduleName] then
+    -- Already loaded
+    if Modules[moduleName] ~= nil then
         return Modules[moduleName]
     end
 
     local url =
         BASE_URL .. moduleName .. ".lua"
 
+    print("")
+    print("----------------------------------------")
     print("[Main] Downloading:", moduleName)
+    print("[Main] URL:", url)
+
+    --// -----------------------------------------------------
+    --// DOWNLOAD
+    --// -----------------------------------------------------
 
     local success, source = pcall(function()
         return game:HttpGet(url)
     end)
 
     if not success then
+
         error(
-            "[Main] HTTP request failed for "
+            "[Main] Failed to download "
             .. moduleName
             .. ".lua\n"
             .. tostring(source)
         )
+
     end
+
+    --// -----------------------------------------------------
+    --// RESPONSE VALIDATION
+    --// -----------------------------------------------------
 
     if type(source) ~= "string" then
+
         error(
-            "[Main] Invalid response for "
+            "[Main] Invalid HTTP response for "
             .. moduleName
-            .. ".lua"
+            .. ".lua\n"
+            .. "Type: "
+            .. type(source)
         )
+
     end
 
-    --// Catch GitHub 404 responses
-    local firstLine =
-        source:match("^[^\r\n]*")
+    print(
+        "[Main] Source length:",
+        #source
+    )
 
-    if firstLine
-        and (
-            firstLine:match("^404")
-            or firstLine:match("404: Not Found")
-            or firstLine:match("Not Found")
-        ) then
+    -- Show beginning of downloaded file
+    print(
+        "[Main] Source preview:",
+        source:sub(1, 120)
+    )
+
+    --// -----------------------------------------------------
+    --// GITHUB ERROR DETECTION
+    --// -----------------------------------------------------
+
+    local trimmedSource =
+        source:gsub("^%s+", "")
+
+    if trimmedSource:match("^404")
+        or trimmedSource:match("^404:%s*Not Found")
+        or trimmedSource:match("404: Not Found") then
 
         error(
             "[Main] GitHub returned 404 for "
@@ -77,13 +106,26 @@ local function LoadModule(moduleName)
 
     end
 
-    if #source < 10 then
+    if trimmedSource:match("^<!DOCTYPE")
+        or trimmedSource:match("^<html") then
+
         error(
-            "[Main] Empty/invalid source for "
+            "[Main] GitHub returned HTML instead of Lua for "
             .. moduleName
-            .. ".lua"
+            .. ".lua\n"
+            .. "Check the repository/file URL."
         )
+
     end
+
+    --// -----------------------------------------------------
+    --// COMPILE
+    --// -----------------------------------------------------
+
+    print(
+        "[Main] Compiling:",
+        moduleName
+    )
 
     local compileSuccess, moduleFunction =
         pcall(function()
@@ -98,7 +140,7 @@ local function LoadModule(moduleName)
     if not compileSuccess then
 
         error(
-            "[Main] Compiler error in "
+            "[Main] Compile error in "
             .. moduleName
             .. ".lua\n"
             .. tostring(moduleFunction)
@@ -106,18 +148,38 @@ local function LoadModule(moduleName)
 
     end
 
-    if not moduleFunction then
+    if type(moduleFunction) ~= "function" then
 
         error(
-            "[Main] loadstring returned nil for "
+            "[Main] loadstring did not return a function for "
             .. moduleName
-            .. ".lua"
+            .. ".lua\n"
+            .. "Returned type: "
+            .. type(moduleFunction)
         )
 
     end
 
+    print(
+        "[Main] Compilation successful:",
+        moduleName
+    )
+
+    --// -----------------------------------------------------
+    --// EXECUTE
+    --// -----------------------------------------------------
+
+    print(
+        "[Main] Executing:",
+        moduleName
+    )
+
     local runSuccess, result =
-        pcall(moduleFunction)
+        pcall(function()
+
+            return moduleFunction()
+
+        end)
 
     if not runSuccess then
 
@@ -130,22 +192,52 @@ local function LoadModule(moduleName)
 
     end
 
+    --// -----------------------------------------------------
+    --// RETURN VALIDATION
+    --// -----------------------------------------------------
+
+    print(
+        "[Main] Return type:",
+        type(result)
+    )
+
     if result == nil then
 
         error(
             "[Main] "
             .. moduleName
-            .. ".lua returned nil."
+            .. ".lua returned NIL.\n"
+            .. "Make sure the file ends with:\n"
+            .. "return "
+            .. moduleName
+        )
+
+    end
+
+    if type(result) ~= "table" then
+
+        warn(
+            "[Main] Warning:",
+            moduleName,
+            "returned",
+            type(result),
+            "instead of table."
         )
 
     end
 
     Modules[moduleName] = result
 
-    print("[Main] Loaded:", moduleName)
+    print(
+        "[Main] Loaded successfully:",
+        moduleName
+    )
+
+    print("----------------------------------------")
 
     return result
 end
+
 
 --// =========================================================
 --// STARTUP
@@ -165,6 +257,11 @@ print("")
 local Config =
     LoadModule("Config")
 
+print(
+    "[Main] Config check:",
+    type(Config)
+)
+
 
 --// =========================================================
 --// ANIMATION DATABASE
@@ -173,12 +270,21 @@ local Config =
 local AnimationDatabase =
     LoadModule("AnimationDatabase")
 
+print(
+    "[Main] AnimationDatabase check:",
+    type(AnimationDatabase)
+)
 
 AnimationDatabase:SetConfig(
     Config
 )
 
 AnimationDatabase:Build()
+
+print(
+    "[Main] AnimationDatabase animations:",
+    AnimationDatabase:GetCount()
+)
 
 
 --// =========================================================
@@ -187,7 +293,6 @@ AnimationDatabase:Build()
 
 local AnimationTracker =
     LoadModule("AnimationTracker")
-
 
 AnimationTracker:SetDependencies(
     Config,
@@ -202,7 +307,6 @@ AnimationTracker:SetDependencies(
 local TargetManager =
     LoadModule("TargetManager")
 
-
 TargetManager:SetConfig(
     Config
 )
@@ -214,7 +318,6 @@ TargetManager:SetConfig(
 
 local ParryController =
     LoadModule("ParryController")
-
 
 ParryController:SetDependencies(
     Config,
@@ -231,7 +334,6 @@ ParryController:SetDependencies(
 local Logger =
     LoadModule("Logger")
 
-
 Logger:SetDependencies(
     Config,
     AnimationDatabase,
@@ -246,7 +348,6 @@ Logger:SetDependencies(
 local ESP =
     LoadModule("ESP")
 
-
 ESP:SetDependencies(
     Config,
     TargetManager
@@ -260,7 +361,6 @@ ESP:SetDependencies(
 local HealthOverlay =
     LoadModule("HealthOverlay")
 
-
 HealthOverlay:SetDependencies(
     Config,
     TargetManager
@@ -273,7 +373,6 @@ HealthOverlay:SetDependencies(
 
 local AutoPlay =
     LoadModule("AutoPlay")
-
 
 AutoPlay:SetDependencies(
     Config,
@@ -289,7 +388,6 @@ AutoPlay:SetDependencies(
 local UI =
     LoadModule("UI")
 
-
 UI:SetDependencies(
     Config,
     TargetManager,
@@ -302,7 +400,7 @@ UI:SetDependencies(
 
 
 print("")
-print("[Main] All modules loaded.")
+print("[Main] All modules loaded successfully.")
 
 
 --// =========================================================
@@ -312,7 +410,6 @@ print("[Main] All modules loaded.")
 local function InitializeModules()
 
     print("[Main] Initializing modules...")
-
 
     local modules = {
 
@@ -329,11 +426,10 @@ local function InitializeModules()
 
     }
 
-
     for _, module in ipairs(modules) do
 
         if type(module) == "table"
-            and module.Initialize then
+            and type(module.Initialize) == "function" then
 
             local success, err =
                 pcall(function()
@@ -343,7 +439,6 @@ local function InitializeModules()
                     )
 
                 end)
-
 
             if not success then
 
@@ -357,7 +452,6 @@ local function InitializeModules()
         end
 
     end
-
 
     print(
         "[Main] Initialization complete."
@@ -380,7 +474,6 @@ local function UpdateTarget()
         return
     end
 
-
     local success, target =
         pcall(function()
 
@@ -388,7 +481,6 @@ local function UpdateTarget()
                 GetCurrentTarget()
 
         end)
-
 
     if success then
 
@@ -418,7 +510,6 @@ local function SetupInput()
                     return
                 end
 
-
                 --// X = Dodge
 
                 if input.KeyCode ==
@@ -437,7 +528,6 @@ local function SetupInput()
                     end
 
                 end
-
 
                 --// F = Block
 
@@ -461,7 +551,6 @@ local function SetupInput()
 
                 end
 
-
                 --// TAB = Cycle Target
 
                 if input.KeyCode ==
@@ -484,7 +573,6 @@ local function SetupInput()
             end
         )
 
-
     table.insert(
         State.Connections,
         inputConnection
@@ -498,7 +586,6 @@ local function SetupInput()
                 if not State.Running then
                     return
                 end
-
 
                 if input.KeyCode ==
                     Enum.KeyCode.F then
@@ -520,7 +607,6 @@ local function SetupInput()
             end
         )
 
-
     table.insert(
         State.Connections,
         releaseConnection
@@ -541,21 +627,23 @@ local function SetupCharacterEvents()
 
                 task.wait(1)
 
-
                 if not State.Running then
                     return
                 end
-
 
                 if AnimationTracker
                     and AnimationTracker.TrackCharacter then
 
                     pcall(function()
 
-                        AnimationTracker:
-                            TrackCharacter(
-                                player.Character
-                            )
+                        if player.Character then
+
+                            AnimationTracker:
+                                TrackCharacter(
+                                    player.Character
+                                )
+
+                        end
 
                     end)
 
@@ -563,7 +651,6 @@ local function SetupCharacterEvents()
 
             end
         )
-
 
     table.insert(
         State.Connections,
@@ -587,12 +674,10 @@ local function StartLoop()
                     return
                 end
 
-
                 UpdateTarget()
 
             end
         )
-
 
     table.insert(
         State.Connections,
@@ -610,7 +695,6 @@ local function StartModules()
 
     print("[Main] Starting modules...")
 
-
     local startList = {
 
         {"TargetManager", TargetManager},
@@ -624,15 +708,13 @@ local function StartModules()
 
     }
 
-
     for _, info in ipairs(startList) do
 
         local name = info[1]
         local module = info[2]
 
-
         if type(module) == "table"
-            and module.Start then
+            and type(module.Start) == "function" then
 
             local success, err =
                 pcall(function()
@@ -640,7 +722,6 @@ local function StartModules()
                     module:Start()
 
                 end)
-
 
             if success then
 
@@ -675,7 +756,6 @@ local function StopModules()
 
     print("[Main] Stopping modules...")
 
-
     local stopList = {
 
         UI,
@@ -689,11 +769,10 @@ local function StopModules()
 
     }
 
-
     for _, module in ipairs(stopList) do
 
         if type(module) == "table"
-            and module.Stop then
+            and type(module.Stop) == "function" then
 
             pcall(function()
 
@@ -729,7 +808,6 @@ local function Cleanup()
 
     end
 
-
     table.clear(
         State.Connections
     )
@@ -753,7 +831,6 @@ local function Start()
 
     end
 
-
     local success, err =
         pcall(function()
 
@@ -771,13 +848,11 @@ local function Start()
 
         end)
 
-
     if not success then
 
         State.Running = false
 
         Cleanup()
-
 
         warn("========================================")
         warn("[Main] STARTUP FAILED")
@@ -787,7 +862,6 @@ local function Start()
         return
 
     end
-
 
     print("")
     print("========================================")
@@ -813,14 +887,11 @@ local function Stop()
         return
     end
 
-
     State.Running = false
-
 
     StopModules()
 
     Cleanup()
-
 
     print(
         "[Main] System stopped."
