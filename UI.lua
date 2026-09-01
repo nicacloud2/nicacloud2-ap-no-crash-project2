@@ -1,6 +1,8 @@
+```lua
 --// =========================================================
 --// GAKURAN - UI
 --// GitHub / Matcha Version
+--// POLLING SAFE
 --// =========================================================
 
 local Players = game:GetService("Players")
@@ -30,7 +32,9 @@ UI.TargetLabel = nil
 UI.AutoPlayButton = nil
 UI.ESPButton = nil
 UI.HealthButton = nil
-UI.Connections = {}
+
+UI.PollInterval = 0.1
+UI.InputPollInterval = 0.05
 
 
 --// =========================================================
@@ -53,6 +57,8 @@ function UI:SetDependencies(
     HealthOverlay = healthOverlay
     AutoPlay = autoPlay
     Logger = logger
+
+    print("[UI] Dependencies received.")
 end
 
 
@@ -75,15 +81,36 @@ end
 
 function UI:Create(className, properties, parent)
 
-    local object = Instance.new(className)
+    local success, object = pcall(function()
 
-    for property, value in pairs(properties or {}) do
-        pcall(function()
-            object[property] = value
-        end)
+        local instance = Instance.new(className)
+
+        for property, value in pairs(properties or {}) do
+
+            pcall(function()
+                instance[property] = value
+            end)
+
+        end
+
+        instance.Parent = parent
+
+        return instance
+
+    end)
+
+    if not success then
+
+        warn(
+            "[UI] Failed to create "
+            .. tostring(className)
+            .. ": "
+            .. tostring(object)
+        )
+
+        return nil
+
     end
-
-    object.Parent = parent
 
     return object
 
@@ -97,19 +124,50 @@ end
 function UI:CreateInterface()
 
     if self.ScreenGui then
-        return
+
+        print("[UI] Interface already exists.")
+
+        return true
+
     end
 
 
     local player = Players.LocalPlayer
 
     if not player then
-        return
+
+        warn("[UI] LocalPlayer not available.")
+
+        return false
+
     end
 
 
-    local playerGui =
-        player:WaitForChild("PlayerGui")
+    print("[UI] LocalPlayer found: " .. tostring(player.Name))
+
+
+    local playerGui = nil
+
+    local success = pcall(function()
+
+        playerGui = player:WaitForChild(
+            "PlayerGui",
+            10
+        )
+
+    end)
+
+
+    if not success or not playerGui then
+
+        warn("[UI] PlayerGui not available.")
+
+        return false
+
+    end
+
+
+    print("[UI] PlayerGui found.")
 
 
     --// ScreenGui
@@ -119,10 +177,24 @@ function UI:CreateInterface()
         {
             Name = "GakuranUI",
             ResetOnSpawn = false,
-            ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+            ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+            Enabled = true,
+            DisplayOrder = 999
         },
         playerGui
     )
+
+
+    if not self.ScreenGui then
+
+        warn("[UI] Failed to create ScreenGui.")
+
+        return false
+
+    end
+
+
+    print("[UI] ScreenGui created.")
 
 
     --// Main Frame
@@ -141,23 +213,36 @@ function UI:CreateInterface()
             BackgroundTransparency = 0.08,
             BorderSizePixel = 0,
             Active = true,
-            Draggable = true
+            Visible = true
         },
         self.ScreenGui
     )
 
 
+    if not self.MainFrame then
+
+        warn("[UI] Failed to create MainFrame.")
+
+        return false
+
+    end
+
+
+    --// Make frame draggable manually through polling
+    self.Dragging = false
+    self.DragStart = nil
+    self.DragPosition = nil
+
+
     --// Corner
 
-    local corner =
-        self:Create(
-            "UICorner",
-            {
-                CornerRadius =
-                    UDim.new(0, 10)
-            },
-            self.MainFrame
-        )
+    self:Create(
+        "UICorner",
+        {
+            CornerRadius = UDim.new(0, 10)
+        },
+        self.MainFrame
+    )
 
 
     --// Title
@@ -170,7 +255,10 @@ function UI:CreateInterface()
             BackgroundTransparency = 1,
             Text = "GAKURAN",
             TextSize = 20,
-            Font = Enum.Font.GothamBold
+            Font = Enum.Font.GothamBold,
+            TextColor3 = Color3.fromRGB(255, 255, 255),
+            TextXAlignment = Enum.TextXAlignment.Center,
+            TextYAlignment = Enum.TextYAlignment.Center
         },
         self.MainFrame
     )
@@ -178,95 +266,66 @@ function UI:CreateInterface()
 
     --// Status
 
-    self.StatusLabel =
-        self:Create(
-            "TextLabel",
-            {
-                Name = "Status",
-                Size = UDim2.new(
-                    1,
-                    -20,
-                    0,
-                    25
-                ),
-                Position = UDim2.new(
-                    0,
-                    10,
-                    0,
-                    42
-                ),
-                BackgroundTransparency = 1,
-                Text = "STATUS: RUNNING",
-                TextSize = 13,
-                Font = Enum.Font.Gotham
-            },
-            self.MainFrame
-        )
+    self.StatusLabel = self:Create(
+        "TextLabel",
+        {
+            Name = "Status",
+            Size = UDim2.new(1, -20, 0, 25),
+            Position = UDim2.new(0, 10, 0, 42),
+            BackgroundTransparency = 1,
+            Text = "STATUS: RUNNING",
+            TextSize = 13,
+            Font = Enum.Font.Gotham,
+            TextColor3 = Color3.fromRGB(255, 255, 255),
+            TextXAlignment = Enum.TextXAlignment.Left
+        },
+        self.MainFrame
+    )
 
 
     --// Target
 
-    self.TargetLabel =
-        self:Create(
-            "TextLabel",
-            {
-                Name = "Target",
-                Size = UDim2.new(
-                    1,
-                    -20,
-                    0,
-                    25
-                ),
-                Position = UDim2.new(
-                    0,
-                    10,
-                    0,
-                    67
-                ),
-                BackgroundTransparency = 1,
-                Text = "TARGET: NONE",
-                TextSize = 13,
-                Font = Enum.Font.Gotham
-            },
-            self.MainFrame
-        )
+    self.TargetLabel = self:Create(
+        "TextLabel",
+        {
+            Name = "Target",
+            Size = UDim2.new(1, -20, 0, 25),
+            Position = UDim2.new(0, 10, 0, 67),
+            BackgroundTransparency = 1,
+            Text = "TARGET: NONE",
+            TextSize = 13,
+            Font = Enum.Font.Gotham,
+            TextColor3 = Color3.fromRGB(255, 255, 255),
+            TextXAlignment = Enum.TextXAlignment.Left
+        },
+        self.MainFrame
+    )
 
 
     --// AutoPlay Button
 
-    self.AutoPlayButton =
-        self:Create(
-            "TextButton",
-            {
-                Name = "AutoPlay",
-                Size = UDim2.new(
-                    1,
-                    -20,
-                    0,
-                    35
-                ),
-                Position = UDim2.new(
-                    0,
-                    10,
-                    0,
-                    100
-                ),
-                BackgroundTransparency = 0.1,
-                BorderSizePixel = 0,
-                Text = "AUTOPLAY: OFF",
-                TextSize = 13,
-                Font = Enum.Font.GothamBold,
-                AutoButtonColor = true
-            },
-            self.MainFrame
-        )
+    self.AutoPlayButton = self:Create(
+        "TextButton",
+        {
+            Name = "AutoPlay",
+            Size = UDim2.new(1, -20, 0, 35),
+            Position = UDim2.new(0, 10, 0, 100),
+            BackgroundTransparency = 0.1,
+            BorderSizePixel = 0,
+            Text = "AUTOPLAY: OFF",
+            TextSize = 13,
+            Font = Enum.Font.GothamBold,
+            TextColor3 = Color3.fromRGB(255, 255, 255),
+            AutoButtonColor = true
+        },
+        self.MainFrame
+    )
 
 
     self:Create(
         "UICorner",
         {
-            CornerRadius =
-                UDim.new(0, 7)
+            CornerRadius = UDim.new(0, 7)
         },
         self.AutoPlayButton
     )
@@ -274,79 +333,57 @@ function UI:CreateInterface()
 
     --// ESP Button
 
-    self.ESPButton =
-        self:Create(
-            "TextButton",
-            {
-                Name = "ESP",
-                Size = UDim2.new(
-                    1,
-                    -20,
-                    0,
-                    35
-                ),
-                Position = UDim2.new(
-                    0,
-                    10,
-                    0,
-                    140
-                ),
-                BackgroundTransparency = 0.1,
-                BorderSizePixel = 0,
-                Text = "ESP: ON",
-                TextSize = 13,
-                Font = Enum.Font.GothamBold,
-                AutoButtonColor = true
-            },
-            self.MainFrame
-        )
+    self.ESPButton = self:Create(
+        "TextButton",
+        {
+            Name = "ESP",
+            Size = UDim2.new(1, -20, 0, 35),
+            Position = UDim2.new(0, 10, 0, 140),
+            BackgroundTransparency = 0.1,
+            BorderSizePixel = 0,
+            Text = "ESP: ON",
+            TextSize = 13,
+            Font = Enum.Font.GothamBold,
+            TextColor3 = Color3.fromRGB(255, 255, 255),
+            AutoButtonColor = true
+        },
+        self.MainFrame
+    )
 
 
     self:Create(
         "UICorner",
         {
-            CornerRadius =
-                UDim.new(0, 7)
+            CornerRadius = UDim.new(0, 7)
         },
         self.ESPButton
     )
 
 
-    --// Health Overlay Button
+    --// Health Button
 
-    self.HealthButton =
-        self:Create(
-            "TextButton",
-            {
-                Name = "Health",
-                Size = UDim2.new(
-                    1,
-                    -20,
-                    0,
-                    35
-                ),
-                Position = UDim2.new(
-                    0,
-                    10,
-                    0,
-                    180
-                ),
-                BackgroundTransparency = 0.1,
-                BorderSizePixel = 0,
-                Text = "HEALTH: ON",
-                TextSize = 13,
-                Font = Enum.Font.GothamBold,
-                AutoButtonColor = true
-            },
-            self.MainFrame
-        )
+    self.HealthButton = self:Create(
+        "TextButton",
+        {
+            Name = "Health",
+            Size = UDim2.new(1, -20, 0, 35),
+            Position = UDim2.new(0, 10, 0, 180),
+            BackgroundTransparency = 0.1,
+            BorderSizePixel = 0,
+            Text = "HEALTH: ON",
+            TextSize = 13,
+            Font = Enum.Font.GothamBold,
+            TextColor3 = Color3.fromRGB(255, 255, 255),
+            AutoButtonColor = true
+        },
+        self.MainFrame
+    )
 
 
     self:Create(
         "UICorner",
         {
-            CornerRadius =
-                UDim.new(0, 7)
+            CornerRadius = UDim.new(0, 7)
         },
         self.HealthButton
     )
@@ -358,127 +395,244 @@ function UI:CreateInterface()
         "TextLabel",
         {
             Name = "Footer",
-            Size = UDim2.new(
-                1,
-                -20,
-                0,
-                20
-            ),
-            Position = UDim2.new(
-                0,
-                10,
-                0,
-                220
-            ),
+            Size = UDim2.new(1, -20, 0, 20),
+            Position = UDim2.new(0, 10, 0, 220),
             BackgroundTransparency = 1,
             Text = "[ RightShift ] Toggle UI",
             TextSize = 11,
-            Font = Enum.Font.Gotham
+            Font = Enum.Font.Gotham,
+            TextColor3 = Color3.fromRGB(200, 200, 200),
+            TextXAlignment = Enum.TextXAlignment.Center
         },
         self.MainFrame
     )
 
 
-    self:SetupButtons()
+    print("[UI] All interface objects created.")
+
+    return true
 
 end
 
 
 --// =========================================================
---// BUTTONS
+--// BUTTON POLLING
 --// =========================================================
 
-function UI:SetupButtons()
+function UI:ProcessButtons()
+
+    if not self.MainFrame then
+        return
+    end
+
+    --// AutoPlay
+    if self.AutoPlayButton then
+
+        local mouse = Players.LocalPlayer:GetMouse()
+
+        if mouse and mouse.Button1Down then
+            --// Button state is handled by MouseButton polling below.
+        end
+
+    end
+
+end
+
+
+--// =========================================================
+--// MOUSE BUTTON HANDLING
+--// =========================================================
+
+function UI:CheckButton(button, callback)
+
+    if not button then
+        return
+    end
+
+    local mouse = Players.LocalPlayer:GetMouse()
+
+    if not mouse then
+        return
+    end
+
+    local position = UserInputService:GetMouseLocation()
+
+    local absolutePosition = button.AbsolutePosition
+    local absoluteSize = button.AbsoluteSize
+
+    local inside =
+        position.X >= absolutePosition.X
+        and position.X <= absolutePosition.X + absoluteSize.X
+        and position.Y >= absolutePosition.Y
+        and position.Y <= absolutePosition.Y + absoluteSize.Y
+
+    if inside and UserInputService:IsMouseButtonPressed(
+        Enum.UserInputType.MouseButton1
+    ) then
+
+        if not self.ButtonDebounce then
+
+            self.ButtonDebounce = true
+
+            pcall(callback)
+
+        end
+
+    end
+
+end
+
+
+--// =========================================================
+--// BUTTON UPDATE
+--// =========================================================
+
+function UI:UpdateButtons()
+
+    local mouseDown =
+        UserInputService:IsMouseButtonPressed(
+            Enum.UserInputType.MouseButton1
+        )
+
+    if not mouseDown then
+
+        self.ButtonDebounce = false
+
+        return
+
+    end
+
+
+    local position =
+        UserInputService:GetMouseLocation()
+
+
+    --// AutoPlay
 
     if self.AutoPlayButton then
 
-        local connection =
-            self.AutoPlayButton.MouseButton1Click:Connect(
-                function()
+        local button = self.AutoPlayButton
 
-                    if not AutoPlay then
-                        return
-                    end
+        local inside =
+            position.X >= button.AbsolutePosition.X
+            and position.X <=
+                button.AbsolutePosition.X + button.AbsoluteSize.X
+            and position.Y >= button.AbsolutePosition.Y
+            and position.Y <=
+                button.AbsolutePosition.Y + button.AbsoluteSize.Y
 
-                    local enabled =
-                        not AutoPlay:IsEnabled()
 
-                    AutoPlay:SetEnabled(enabled)
+        if inside and not self.ButtonDebounce then
 
-                    self.AutoPlayButton.Text =
-                        enabled
-                        and "AUTOPLAY: ON"
-                        or "AUTOPLAY: OFF"
+            self.ButtonDebounce = true
 
-                end
-            )
+            if AutoPlay and AutoPlay.IsEnabled then
 
-        table.insert(
-            self.Connections,
-            connection
-        )
+                local enabled =
+                    not AutoPlay:IsEnabled()
+
+                AutoPlay:SetEnabled(enabled)
+
+                button.Text =
+                    enabled
+                    and "AUTOPLAY: ON"
+                    or "AUTOPLAY: OFF"
+
+                print(
+                    "[UI] AutoPlay:",
+                    enabled
+                )
+
+            end
+
+        end
 
     end
 
+
+    --// ESP
 
     if self.ESPButton then
 
-        local connection =
-            self.ESPButton.MouseButton1Click:Connect(
-                function()
+        local button = self.ESPButton
 
-                    if not ESP then
-                        return
-                    end
+        local inside =
+            position.X >= button.AbsolutePosition.X
+            and position.X <=
+                button.AbsolutePosition.X + button.AbsoluteSize.X
+            and position.Y >= button.AbsolutePosition.Y
+            and position.Y <=
+                button.AbsolutePosition.Y + button.AbsoluteSize.Y
 
-                    local enabled =
-                        not ESP:IsEnabled()
 
-                    ESP:SetEnabled(enabled)
+        if inside and not self.ButtonDebounce then
 
-                    self.ESPButton.Text =
-                        enabled
-                        and "ESP: ON"
-                        or "ESP: OFF"
+            self.ButtonDebounce = true
 
-                end
-            )
+            if ESP and ESP.IsEnabled then
 
-        table.insert(
-            self.Connections,
-            connection
-        )
+                local enabled =
+                    not ESP:IsEnabled()
+
+                ESP:SetEnabled(enabled)
+
+                button.Text =
+                    enabled
+                    and "ESP: ON"
+                    or "ESP: OFF"
+
+                print(
+                    "[UI] ESP:",
+                    enabled
+                )
+
+            end
+
+        end
 
     end
 
 
+    --// Health
+
     if self.HealthButton then
 
-        local connection =
-            self.HealthButton.MouseButton1Click:Connect(
-                function()
+        local button = self.HealthButton
 
-                    if not HealthOverlay then
-                        return
-                    end
+        local inside =
+            position.X >= button.AbsolutePosition.X
+            and position.X <=
+                button.AbsolutePosition.X + button.AbsoluteSize.X
+            and position.Y >= button.AbsolutePosition.Y
+            and position.Y <=
+                button.AbsolutePosition.Y + button.AbsoluteSize.Y
 
-                    local enabled =
-                        not HealthOverlay:IsEnabled()
 
-                    HealthOverlay:SetEnabled(enabled)
+        if inside and not self.ButtonDebounce then
 
-                    self.HealthButton.Text =
-                        enabled
-                        and "HEALTH: ON"
-                        or "HEALTH: OFF"
+            self.ButtonDebounce = true
 
-                end
-            )
+            if HealthOverlay
+                and HealthOverlay.IsEnabled then
 
-        table.insert(
-            self.Connections,
-            connection
-        )
+                local enabled =
+                    not HealthOverlay:IsEnabled()
+
+                HealthOverlay:SetEnabled(enabled)
+
+                button.Text =
+                    enabled
+                    and "HEALTH: ON"
+                    or "HEALTH: OFF"
+
+                print(
+                    "[UI] HealthOverlay:",
+                    enabled
+                )
+
+            end
+
+        end
 
     end
 
@@ -510,6 +664,7 @@ function UI:Update()
                 return TargetManager:GetCurrentTarget()
             end)
 
+
         if success and target then
 
             local name = "UNKNOWN"
@@ -525,13 +680,17 @@ function UI:Update()
 
             end
 
-            self.TargetLabel.Text =
-                "TARGET: " .. name
+            if self.TargetLabel then
+                self.TargetLabel.Text =
+                    "TARGET: " .. name
+            end
 
         else
 
-            self.TargetLabel.Text =
-                "TARGET: NONE"
+            if self.TargetLabel then
+                self.TargetLabel.Text =
+                    "TARGET: NONE"
+            end
 
         end
 
@@ -540,11 +699,70 @@ function UI:Update()
 
     --// Status
 
-    self.StatusLabel.Text =
-        "STATUS: "
-        .. (self.State.Running
-            and "RUNNING"
-            or "STOPPED")
+    if self.StatusLabel then
+
+        self.StatusLabel.Text =
+            "STATUS: "
+            .. (
+                self.State.Running
+                and "RUNNING"
+                or "STOPPED"
+            )
+
+    end
+
+
+    --// Make sure UI remains visible
+
+    if self.ScreenGui then
+        self.ScreenGui.Enabled = true
+    end
+
+    if self.MainFrame then
+        self.MainFrame.Visible =
+            self.State.Visible
+    end
+
+end
+
+
+--// =========================================================
+--// KEYBOARD POLLING
+--// =========================================================
+
+function UI:CheckKeyboard()
+
+    local success, pressed =
+        pcall(function()
+
+            return UserInputService:IsKeyDown(
+                Enum.KeyCode.RightShift
+            )
+
+        end)
+
+
+    if not success then
+        return
+    end
+
+
+    if pressed and not self.RightShiftDown then
+
+        self.RightShiftDown = true
+
+        self:Toggle()
+
+        print(
+            "[UI] RightShift:",
+            self.State.Visible
+        )
+
+    elseif not pressed then
+
+        self.RightShiftDown = false
+
+    end
 
 end
 
@@ -557,6 +775,7 @@ function UI:Toggle()
 
     self.State.Visible =
         not self.State.Visible
+
 
     if self.MainFrame then
 
@@ -578,33 +797,31 @@ function UI:Start()
         return
     end
 
+
     self.State.Running = true
 
-    self:CreateInterface()
+
+    print("[UI] Creating interface...")
 
 
-    local connection =
-        UserInputService.InputBegan:Connect(
-            function(input, gameProcessed)
+    local created = self:CreateInterface()
 
-                if gameProcessed then
-                    return
-                end
 
-                if input.KeyCode ==
-                    Enum.KeyCode.RightShift then
+    if not created then
 
-                    self:Toggle()
+        self.State.Running = false
 
-                end
-
-            end
+        warn(
+            "[UI] Interface creation FAILED."
         )
 
+        return
 
-    table.insert(
-        self.Connections,
-        connection
+    end
+
+
+    print(
+        "[UI] Interface creation SUCCESS."
     )
 
 
@@ -612,9 +829,17 @@ function UI:Start()
 
         while self.State.Running do
 
-            self:Update()
+            pcall(function()
 
-            task.wait(0.1)
+                self:Update()
+                self:UpdateButtons()
+                self:CheckKeyboard()
+
+            end)
+
+            task.wait(
+                self.PollInterval
+            )
 
         end
 
@@ -636,24 +861,8 @@ function UI:Stop()
         return
     end
 
+
     self.State.Running = false
-
-
-    for _, connection in
-        ipairs(self.Connections) do
-
-        if connection then
-
-            pcall(function()
-                connection:Disconnect()
-            end)
-
-        end
-
-    end
-
-
-    table.clear(self.Connections)
 
 
     if self.ScreenGui then
@@ -667,6 +876,11 @@ function UI:Stop()
 
     self.ScreenGui = nil
     self.MainFrame = nil
+    self.StatusLabel = nil
+    self.TargetLabel = nil
+    self.AutoPlayButton = nil
+    self.ESPButton = nil
+    self.HealthButton = nil
 
 
     print("[UI] Stopped.")
@@ -674,4 +888,10 @@ function UI:Stop()
 end
 
 
+--// =========================================================
+--// FINAL MODULE RESULT
+--// =========================================================
+
+_G.__GakuranModuleResult = UI
 return UI
+```
