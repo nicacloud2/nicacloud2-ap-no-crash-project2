@@ -1,7 +1,7 @@
 --// =========================================================
 --// GAKURAN - HEALTH OVERLAY
 --// GitHub / Matcha Version
---// DRAWING API VERSION
+--// DRAWING API
 --// =========================================================
 
 local Players = game:GetService("Players")
@@ -26,6 +26,7 @@ HealthOverlay.PollInterval = 0.15
 --// =========================================================
 
 function HealthOverlay:SetDependencies(config, targetManager)
+
     Config = config
     TargetManager = targetManager
 
@@ -38,6 +39,7 @@ end
 --// =========================================================
 
 function HealthOverlay:Initialize(state)
+
     self.SharedState = state
 
     print("[HealthOverlay] Initialized.")
@@ -45,7 +47,7 @@ end
 
 
 --// =========================================================
---// CREATE DRAWINGS
+--// CREATE
 --// =========================================================
 
 function HealthOverlay:Create(player)
@@ -63,30 +65,25 @@ function HealthOverlay:Create(player)
     end
 
 
-    local box = Drawing.new("Square")
-    box.Visible = false
-    box.Filled = false
-    box.Thickness = 1
-
-
     local healthBar = Drawing.new("Square")
+
     healthBar.Visible = false
     healthBar.Filled = true
     healthBar.Thickness = 1
 
 
-    local text = Drawing.new("Text")
-    text.Visible = false
-    text.Center = true
-    text.Outline = true
-    text.Size = 13
-    text.Text = "100 / 100"
+    local healthText = Drawing.new("Text")
+
+    healthText.Visible = false
+    healthText.Center = true
+    healthText.Outline = true
+    healthText.Size = 13
+    healthText.Text = "100 / 100"
 
 
     self.Objects[player] = {
-        Box = box,
         HealthBar = healthBar,
-        Text = text
+        Text = healthText
     }
 end
 
@@ -104,28 +101,47 @@ function HealthOverlay:Remove(player)
     end
 
 
-    if object.Box then
-        pcall(function()
-            object.Box:Remove()
-        end)
-    end
-
-
     if object.HealthBar then
+
         pcall(function()
             object.HealthBar:Remove()
         end)
+
     end
 
 
     if object.Text then
+
         pcall(function()
             object.Text:Remove()
         end)
+
     end
 
 
     self.Objects[player] = nil
+end
+
+
+--// =========================================================
+--// HIDE
+--// =========================================================
+
+function HealthOverlay:Hide(object)
+
+    if not object then
+        return
+    end
+
+
+    if object.HealthBar then
+        object.HealthBar.Visible = false
+    end
+
+
+    if object.Text then
+        object.Text.Visible = false
+    end
 end
 
 
@@ -156,6 +172,7 @@ function HealthOverlay:UpdatePlayer(player)
     local root =
         character:FindFirstChild("HumanoidRootPart")
 
+
     if not humanoid or not root then
         self:Hide(object)
         return
@@ -177,34 +194,14 @@ function HealthOverlay:UpdatePlayer(player)
     end
 
 
-    local position, onScreen =
+    local screenPosition, onScreen =
         Camera:WorldToViewportPoint(root.Position)
 
 
-    if not onScreen or position.Z <= 0 then
+    if not onScreen or screenPosition.Z <= 0 then
         self:Hide(object)
         return
     end
-
-
-    local distance = position.Z
-
-    local height =
-        math.clamp(
-            1800 / math.max(distance, 1),
-            35,
-            90
-        )
-
-
-    local width = height * 1.8
-
-
-    local x =
-        position.X - (width / 2)
-
-    local y =
-        position.Y - height
 
 
     local percentage =
@@ -215,34 +212,38 @@ function HealthOverlay:UpdatePlayer(player)
         )
 
 
-    --// Box
+    --// Scale based on distance
 
-    object.Box.Position =
-        Vector2.new(
-            x,
-            y
+    local distance = screenPosition.Z
+
+    local height =
+        math.clamp(
+            1800 / math.max(distance, 1),
+            35,
+            90
         )
 
-    object.Box.Size =
-        Vector2.new(
-            width,
-            height
-        )
-
-    object.Box.Visible = true
-
-
-    --// Health bar
 
     local barWidth = 4
+
+
+    local x =
+        screenPosition.X - 35
+
+
+    local y =
+        screenPosition.Y - (height / 2)
+
 
     local barHeight =
         height * percentage
 
 
+    --// Health bar
+
     object.HealthBar.Position =
         Vector2.new(
-            x - barWidth - 3,
+            x,
             y + height - barHeight
         )
 
@@ -253,6 +254,7 @@ function HealthOverlay:UpdatePlayer(player)
             barHeight
         )
 
+
     object.HealthBar.Visible = true
 
 
@@ -260,7 +262,7 @@ function HealthOverlay:UpdatePlayer(player)
 
     object.Text.Position =
         Vector2.new(
-            position.X,
+            screenPosition.X,
             y - 15
         )
 
@@ -274,26 +276,6 @@ function HealthOverlay:UpdatePlayer(player)
 
 
     object.Text.Visible = true
-end
-
-
---// =========================================================
---// HIDE
---// =========================================================
-
-function HealthOverlay:Hide(object)
-
-    if object.Box then
-        object.Box.Visible = false
-    end
-
-    if object.HealthBar then
-        object.HealthBar.Visible = false
-    end
-
-    if object.Text then
-        object.Text.Visible = false
-    end
 end
 
 
@@ -352,6 +334,7 @@ function HealthOverlay:Poll()
         return
     end
 
+
     if not self.State.Enabled then
         return
     end
@@ -375,10 +358,9 @@ function HealthOverlay:SetEnabled(enabled)
 
     if not self.State.Enabled then
 
-        for player in pairs(self.Objects) do
-            self:Hide(self.Objects[player])
+        for player, object in pairs(self.Objects) do
+            self:Hide(object)
         end
-
     end
 end
 
@@ -386,7 +368,6 @@ end
 function HealthOverlay:IsEnabled()
 
     return self.State.Enabled
-
 end
 
 
@@ -400,8 +381,6 @@ function HealthOverlay:Start()
         return
     end
 
-
-    --// Check Drawing API
 
     if not Drawing or not Drawing.new then
 
@@ -430,7 +409,6 @@ function HealthOverlay:Start()
             )
 
         end
-
     end)
 
 
@@ -469,7 +447,6 @@ end
 function HealthOverlay:Destroy()
 
     self:Stop()
-
 end
 
 
