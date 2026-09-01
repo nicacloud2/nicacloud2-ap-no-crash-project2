@@ -1,9 +1,7 @@
+--// Gakuran Modular Project
 --// Logger.lua
---// Gakuran Logging / Cache Module
 
 local Players = game:GetService("Players")
-
-local LocalPlayer = Players.LocalPlayer
 
 local Config = require(script.Parent.Config)
 local AnimationDatabase = require(script.Parent.AnimationDatabase)
@@ -11,51 +9,75 @@ local AnimationTracker = require(script.Parent.AnimationTracker)
 
 local Logger = {}
 
---------------------------------------------------
---// State
---------------------------------------------------
+--==================================================
+-- STATE
+--==================================================
 
 Logger.State = nil
+Logger.Enabled = true
+
+Logger.AnimationListener = nil
 
 Logger.AnimationsLoggedCache = {}
 Logger.AnimationsLoggedOrder = {}
 
 Logger.DamageLog = {}
-Logger.Enabled = true
 
---------------------------------------------------
---// Initialize
---------------------------------------------------
+--==================================================
+-- INITIALIZE
+--==================================================
 
 function Logger:Initialize(State)
+
     self.State = State
+
+    self.Enabled = true
+
+    self.AnimationListener = nil
+
+    self.AnimationsLoggedCache = {}
+    self.AnimationsLoggedOrder = {}
+
+    self.DamageLog = {}
+
 end
 
---------------------------------------------------
---// Enable / Disable
---------------------------------------------------
+--==================================================
+-- ENABLE / DISABLE
+--==================================================
 
 function Logger:SetEnabled(enabled)
+
     self.Enabled = enabled == true
+
 end
 
 function Logger:IsEnabled()
+
     return self.Enabled
+
 end
 
---------------------------------------------------
---// Animation Cache
---------------------------------------------------
+--==================================================
+-- ANIMATION CACHE
+--==================================================
 
 function Logger:IsAnimationLogged(animationId)
+
+    if not animationId then
+        return false
+    end
+
     return self.AnimationsLoggedCache[animationId] == true
+
 end
 
---------------------------------------------------
---// Log Animation
---------------------------------------------------
+--==================================================
+-- LOG ANIMATION
+--==================================================
 
 function Logger:LogAnimation(animationData)
+
     if not self.Enabled then
         return
     end
@@ -64,17 +86,13 @@ function Logger:LogAnimation(animationData)
         return
     end
 
-    local animationId =
-        animationData.AnimationId
+    local animationId = animationData.AnimationId
 
     if not animationId then
         return
     end
 
-    --------------------------------------------------
-    -- Prevent duplicate logs
-    --------------------------------------------------
-
+    -- Prevent duplicate entries
     if self:IsAnimationLogged(animationId) then
         return
     end
@@ -86,51 +104,38 @@ function Logger:LogAnimation(animationData)
         animationId
     )
 
-    --------------------------------------------------
-    -- Console Output
-    --------------------------------------------------
-
     local displayName =
         animationData.DisplayName
-        or AnimationTracker:GetDisplayName(
-            animationId
-        )
+        or AnimationDatabase:GetDisplayName(animationId)
+        or "Unknown"
 
     local style =
         animationData.Style
+        or AnimationDatabase:GetStyle(animationId)
         or "Unknown"
 
     print(
         string.format(
-            "[Animation] %s | %s | %s",
+            "[AnimationLogger] %s | %s | %s",
             displayName,
             animationId,
             style
         )
     )
 
-    --------------------------------------------------
-    -- Callback
-    --------------------------------------------------
-
-    if self.OnAnimationLogged then
-        self.OnAnimationLogged(
-            animationData
-        )
-    end
 end
 
---------------------------------------------------
---// Force Log Animation
---------------------------------------------------
+--==================================================
+-- FORCE LOG
+--==================================================
 
 function Logger:ForceLogAnimation(animationData)
+
     if not animationData then
         return
     end
 
-    local animationId =
-        animationData.AnimationId
+    local animationId = animationData.AnimationId
 
     if not animationId then
         return
@@ -143,121 +148,152 @@ function Logger:ForceLogAnimation(animationData)
         animationId
     )
 
-    print(
-        "[Animation]",
-        animationData.DisplayName
-            or animationId
-    )
 end
 
---------------------------------------------------
---// Get Logged Animations
---------------------------------------------------
+--==================================================
+-- GET LOGGED ANIMATIONS
+--==================================================
 
 function Logger:GetLoggedAnimations()
-    return self.AnimationsLoggedOrder
-end
 
---------------------------------------------------
---// Get Animation Cache
---------------------------------------------------
+    return self.AnimationsLoggedOrder
+
+end
 
 function Logger:GetAnimationCache()
+
     return self.AnimationsLoggedCache
+
 end
 
---------------------------------------------------
---// Clear Animation Cache
---------------------------------------------------
+--==================================================
+-- CLEAR CACHE
+--==================================================
 
 function Logger:ClearAnimationCache()
-    self.AnimationsLoggedCache = {}
-    self.AnimationsLoggedOrder = {}
+
+    table.clear(self.AnimationsLoggedCache)
+    table.clear(self.AnimationsLoggedOrder)
+
+    print("[AnimationLogger] Animation cache cleared.")
+
 end
 
---------------------------------------------------
---// Copy Logged Animations
---------------------------------------------------
+--==================================================
+-- COPY LOGGED ANIMATIONS
+--==================================================
 
 function Logger:CopyLoggedAnimations()
-    local output = {}
 
-    for _, animationId in ipairs(
-        self.AnimationsLoggedOrder
-    ) do
+    local lines = {}
+
+    for _, animationId in ipairs(self.AnimationsLoggedOrder) do
+
+        local data =
+            AnimationDatabase:Get(animationId)
+
+        local displayName =
+            data and data.DisplayName
+            or "Unknown"
+
+        local style =
+            data and data.Style
+            or "Unknown"
 
         table.insert(
-            output,
-            tostring(animationId)
+            lines,
+            string.format(
+                '["%s"] = {DisplayName = "%s", Style = "%s"},',
+                animationId,
+                displayName,
+                style
+            )
         )
+
     end
 
-    local text =
-        table.concat(
-            output,
-            "\n"
-        )
+    local output = table.concat(lines, "\n")
 
     if setclipboard then
-        setclipboard(text)
+
+        setclipboard(output)
+
+        print("[AnimationLogger] Logged animations copied.")
+
+    else
+
+        warn(
+            "[AnimationLogger] setclipboard is not available."
+        )
+
     end
 
-    return text
+    return output
+
 end
 
---------------------------------------------------
---// Copy Ignore List
---------------------------------------------------
+--==================================================
+-- COPY IGNORE LIST
+--==================================================
 
 function Logger:CopyIgnoreList()
-    local output = {}
 
-    for _, animationId in ipairs(
-        Config.IgnoreIds
-    ) do
+    local lines = {}
+
+    for _, id in ipairs(Config.IgnoreIds) do
 
         table.insert(
-            output,
-            tostring(animationId)
+            lines,
+            tostring(id)
         )
+
     end
 
-    local text =
-        table.concat(
-            output,
-            ","
-        )
+    local output =
+        table.concat(lines, ",")
 
     if setclipboard then
-        setclipboard(text)
+
+        setclipboard(output)
+
+        print("[AnimationLogger] Ignore list copied.")
+
+    else
+
+        warn(
+            "[AnimationLogger] setclipboard is not available."
+        )
+
     end
 
-    return text
+    return output
+
 end
 
---------------------------------------------------
---// Add Ignore ID
---------------------------------------------------
+--==================================================
+-- ADD IGNORE ID
+--==================================================
 
 function Logger:AddIgnoreId(animationId)
-    if not animationId then
-        return false
-    end
 
     local numericId =
         tonumber(
-            tostring(animationId):match("%d+")
+            string.match(
+                tostring(animationId),
+                "%d+"
+            )
         )
 
     if not numericId then
         return false
     end
 
-    if table.find(
-        Config.IgnoreIds,
-        numericId
-    ) then
-        return false
+    for _, existingId in ipairs(Config.IgnoreIds) do
+
+        if existingId == numericId then
+            return false
+        end
+
     end
 
     table.insert(
@@ -266,63 +302,63 @@ function Logger:AddIgnoreId(animationId)
     )
 
     return true
+
 end
 
---------------------------------------------------
---// Remove Ignore ID
---------------------------------------------------
+--==================================================
+-- REMOVE IGNORE ID
+--==================================================
 
 function Logger:RemoveIgnoreId(animationId)
+
     local numericId =
         tonumber(
-            tostring(animationId):match("%d+")
+            string.match(
+                tostring(animationId),
+                "%d+"
+            )
         )
 
     if not numericId then
         return false
     end
 
-    local index =
-        table.find(
-            Config.IgnoreIds,
-            numericId
-        )
+    for i = #Config.IgnoreIds, 1, -1 do
 
-    if not index then
-        return false
+        if Config.IgnoreIds[i] == numericId then
+
+            table.remove(
+                Config.IgnoreIds,
+                i
+            )
+
+            return true
+
+        end
+
     end
 
-    table.remove(
-        Config.IgnoreIds,
-        index
-    )
+    return false
 
-    return true
 end
 
---------------------------------------------------
---// Damage Logging
---------------------------------------------------
+--==================================================
+-- DAMAGE LOGGING
+--==================================================
 
-function Logger:LogDamage(
-    source,
-    target,
-    damage,
-    extraData
-)
-    if not self.Enabled then
+function Logger:LogDamage(data)
+
+    if not data then
         return
     end
 
     local entry = {
-        Time = os.clock(),
-
-        Source = source,
-        Target = target,
-
-        Damage = damage,
-
-        Data = extraData,
+        Timestamp = os.clock(),
+        Damage = data.Damage,
+        Target = data.Target,
+        Source = data.Source,
+        HealthBefore = data.HealthBefore,
+        HealthAfter = data.HealthAfter,
     }
 
     table.insert(
@@ -330,163 +366,182 @@ function Logger:LogDamage(
         entry
     )
 
-    --------------------------------------------------
-    -- Console
-    --------------------------------------------------
-
-    local sourceName =
-        source
-        and source.Name
-        or "Unknown"
-
-    local targetName =
-        target
-        and target.Name
-        or "Unknown"
-
-    print(
-        string.format(
-            "[Damage] %s -> %s : %s",
-            sourceName,
-            targetName,
-            tostring(damage)
-        )
-    )
-
-    --------------------------------------------------
-    -- Callback
-    --------------------------------------------------
-
-    if self.OnDamageLogged then
-        self.OnDamageLogged(entry)
-    end
-
-    return entry
 end
 
---------------------------------------------------
---// Get Damage Log
---------------------------------------------------
+--==================================================
+-- GET DAMAGE LOG
+--==================================================
 
 function Logger:GetDamageLog()
+
     return self.DamageLog
+
 end
-
---------------------------------------------------
---// Clear Damage Log
---------------------------------------------------
-
-function Logger:ClearDamageLog()
-    self.DamageLog = {}
-end
-
---------------------------------------------------
---// Get Last Damage
---------------------------------------------------
 
 function Logger:GetLastDamage()
+
     return self.DamageLog[
         #self.DamageLog
     ]
+
 end
 
---------------------------------------------------
---// Export Damage Log
---------------------------------------------------
+--==================================================
+-- CLEAR DAMAGE LOG
+--==================================================
+
+function Logger:ClearDamageLog()
+
+    table.clear(self.DamageLog)
+
+end
+
+--==================================================
+-- EXPORT DAMAGE LOG
+--==================================================
 
 function Logger:ExportDamageLog()
-    local output = {}
 
-    for _, entry in ipairs(
-        self.DamageLog
-    ) do
+    local lines = {}
+
+    for _, entry in ipairs(self.DamageLog) do
+
+        local targetName = "Unknown"
+
+        if typeof(entry.Target) == "Instance" then
+            targetName = entry.Target.Name
+        elseif entry.Target then
+            targetName = tostring(entry.Target)
+        end
 
         table.insert(
-            output,
+            lines,
             string.format(
-                "[%.3f] %s -> %s : %s",
-                entry.Time,
-
-                entry.Source
-                    and entry.Source.Name
-                    or "Unknown",
-
-                entry.Target
-                    and entry.Target.Name
-                    or "Unknown",
-
-                tostring(entry.Damage)
+                "[%.3f] %s | Damage: %s | HP: %s -> %s",
+                entry.Timestamp,
+                targetName,
+                tostring(entry.Damage or "?"),
+                tostring(entry.HealthBefore or "?"),
+                tostring(entry.HealthAfter or "?")
             )
         )
+
     end
 
-    local text =
-        table.concat(
-            output,
-            "\n"
-        )
+    local output =
+        table.concat(lines, "\n")
 
     if setclipboard then
-        setclipboard(text)
+
+        setclipboard(output)
+
+        print("[DamageLogger] Damage log copied.")
+
+    else
+
+        warn(
+            "[DamageLogger] setclipboard is not available."
+        )
+
     end
 
-    return text
+    return output
+
 end
 
---------------------------------------------------
---// Log Unknown Animation
---------------------------------------------------
+--==================================================
+-- UNKNOWN ANIMATION
+--==================================================
 
-function Logger:LogUnknownAnimation(
-    animationId,
-    character
-)
-    if not self.Enabled then
+function Logger:LogUnknownAnimation(animationData)
+
+    if not animationData then
+        return
+    end
+
+    local animationId =
+        animationData.AnimationId
+
+    if not animationId then
         return
     end
 
     print(
-        string.format(
-            "[Unknown Animation] %s | Character: %s",
-            tostring(animationId),
-            character
-                and character.Name
-                or "Unknown"
-        )
+        "[AnimationLogger] Unknown animation:",
+        animationId
     )
+
 end
 
---------------------------------------------------
---// Connect Animation Tracker
---------------------------------------------------
+--==================================================
+-- ANIMATION TRACKER CONNECTION
+--==================================================
 
 function Logger:ConnectAnimationTracker()
-    AnimationTracker.OnAnimation =
-        function(animationData)
 
-            if not animationData.Known then
-                self:LogUnknownAnimation(
-                    animationData.AnimationId,
-                    animationData.Character
-                )
-            end
+    if self.AnimationListener then
+        return
+    end
 
-            if Config.AnimationTracker.LogAnimations then
-                self:LogAnimation(
-                    animationData
-                )
-            end
+    self.AnimationListener = function(animationData)
+
+        if not self.Enabled then
+            return
+        end
+
+        if not animationData then
+            return
+        end
+
+        if animationData.DatabaseData then
+
+            self:LogAnimation(animationData)
+
+        else
+
+            self:LogUnknownAnimation(animationData)
 
         end
+
+    end
+
+    AnimationTracker:AddListener(
+        self.AnimationListener
+    )
+
 end
 
---------------------------------------------------
---// Reset
---------------------------------------------------
+--==================================================
+-- DISCONNECT
+--==================================================
+
+function Logger:DisconnectAnimationTracker()
+
+    if not self.AnimationListener then
+        return
+    end
+
+    AnimationTracker:RemoveListener(
+        self.AnimationListener
+    )
+
+    self.AnimationListener = nil
+
+end
+
+--==================================================
+-- RESET
+--==================================================
 
 function Logger:Reset()
-    self:ClearAnimationCache()
-    self:ClearDamageLog()
+
+    self:DisconnectAnimationTracker()
+
+    self.AnimationsLoggedCache = {}
+    self.AnimationsLoggedOrder = {}
+
+    self.DamageLog = {}
+
 end
 
 return Logger
