@@ -5,11 +5,9 @@
 
 local AnimationDatabase = {}
 
---// =========================================================
---// CONFIG
---// =========================================================
-
 local Config = nil
+
+AnimationDatabase.Flattened = {}
 
 
 --// =========================================================
@@ -24,6 +22,68 @@ end
 
 
 --// =========================================================
+--// NORMALIZE ANIMATION ID
+--// =========================================================
+
+function AnimationDatabase:NormalizeId(animationId)
+
+    if not animationId then
+        return nil
+    end
+
+    animationId = tostring(animationId)
+
+    if animationId == "" then
+        return nil
+    end
+
+    --// Already formatted
+    if string.find(animationId, "rbxassetid://", 1, true) then
+        return animationId
+    end
+
+    --// Raw numeric ID
+    if tonumber(animationId) then
+        return "rbxassetid://" .. animationId
+    end
+
+    return animationId
+
+end
+
+
+--// =========================================================
+--// ADD INTERNAL
+--// =========================================================
+
+function AnimationDatabase:AddInternal(animationId, data)
+
+    local id = self:NormalizeId(animationId)
+
+    if not id then
+        return false
+    end
+
+    if type(data) ~= "table" then
+        data = {}
+    end
+
+    local entry = {}
+
+    for key, value in pairs(data) do
+        entry[key] = value
+    end
+
+    entry.AnimationId = id
+
+    self.Flattened[id] = entry
+
+    return true
+
+end
+
+
+--// =========================================================
 --// BUILD DATABASE
 --// =========================================================
 
@@ -33,69 +93,170 @@ function AnimationDatabase:Build()
         error("[AnimationDatabase] Config has not been loaded.")
     end
 
-    local FlattenedConfig = {}
+    self.Flattened = {}
 
     local GameConfig = Config.GameConfig or {}
 
+    local count = 0
+
+
+    --// =====================================================
+    --// READ STYLE DATABASE
+    --// =====================================================
+
     for styleName, assets in pairs(GameConfig) do
 
-        if type(assets) ~= "table" then
-            continue
-        end
+        if type(assets) == "table" then
 
-        for assetId, data in pairs(assets) do
+            local m1Time = assets.M1Time
 
-            -- M1Time is configuration data, not an animation
-            if assetId == "M1Time" then
-                continue
+
+            for animationId, data in pairs(assets) do
+
+                --// Ignore configuration values
+                if animationId ~= "M1Time"
+                    and type(data) == "table"
+                then
+
+                    local entry = {}
+
+                    for key, value in pairs(data) do
+                        entry[key] = value
+                    end
+
+
+                    entry.Style = styleName
+                    entry.AnimationId =
+                        self:NormalizeId(animationId)
+
+
+                    --// Apply style M1 timing
+
+                    if not entry.ReactionTime
+                        and m1Time
+                    then
+
+                        entry.ReactionTime = m1Time
+
+                    end
+
+
+                    if not entry.ReactionTime
+                        and not entry.DefaultReactionTime
+                    then
+
+                        entry.DefaultReactionTime =
+                            Config.DefaultReactionTime or 0.1
+
+                    end
+
+
+                    local normalizedId =
+                        self:NormalizeId(animationId)
+
+
+                    if normalizedId then
+
+                        self.Flattened[normalizedId] =
+                            entry
+
+                        count += 1
+
+                    end
+
+                end
+
             end
-
-            if type(data) ~= "table" then
-                continue
-            end
-
-            local flatData = table.clone(data)
-
-            flatData.Style = styleName
-
-
-            --// M1 animations inherit the style's M1Time
-
-            if data.DisplayName ~= "M2" and assets.M1Time then
-
-                flatData.ReactionTime = assets.M1Time
-
-            elseif not data.ReactionTime then
-
-                flatData.DefaultReactionTime =
-                    Config.DefaultReactionTime
-
-            else
-
-                flatData.ReactionTime =
-                    data.ReactionTime
-
-            end
-
-
-            FlattenedConfig[assetId] = flatData
 
         end
 
     end
 
-    self.Flattened = FlattenedConfig
 
-    return FlattenedConfig
+    --// =====================================================
+    --// OPTIONAL DIRECT ANIMATION LIST
+    --// =====================================================
+    --// Allows Config to contain:
+    --
+    --// Config.Animations = {
+    --//     {
+    --//         AnimationId = "rbxassetid://123",
+    --//         DisplayName = "M1",
+    --//         Style = "Karate",
+    --//         ReactionTime = 0.6
+    --//     }
+    --// }
+    --
+    --// =====================================================
+
+    if type(Config.Animations) == "table" then
+
+        for _, animation in pairs(Config.Animations) do
+
+            if type(animation) == "table" then
+
+                local animationId =
+                    animation.AnimationId
+                    or animation.Id
+                    or animation.AssetId
+
+
+                if animationId then
+
+                    local id =
+                        self:NormalizeId(animationId)
+
+
+                    if id then
+
+                        local entry = {}
+
+                        for key, value in pairs(animation) do
+                            entry[key] = value
+                        end
+
+
+                        entry.AnimationId = id
+
+
+                        if not entry.ReactionTime
+                            and not entry.DefaultReactionTime
+                        then
+
+                            entry.DefaultReactionTime =
+                                Config.DefaultReactionTime or 0.1
+
+                        end
+
+
+                        if not self.Flattened[id] then
+                            count += 1
+                        end
+
+
+                        self.Flattened[id] = entry
+
+                    end
+
+                end
+
+            end
+
+        end
+
+    end
+
+
+    print(
+        "[AnimationDatabase] Built database with "
+        .. tostring(count)
+        .. " animations."
+    )
+
+
+    return self.Flattened
 
 end
-
-
---// =========================================================
---// DATABASE
---// =========================================================
-
-AnimationDatabase.Flattened = {}
 
 
 --// =========================================================
@@ -104,11 +265,13 @@ AnimationDatabase.Flattened = {}
 
 function AnimationDatabase:Get(animationId)
 
-    if not animationId then
+    local id = self:NormalizeId(animationId)
+
+    if not id then
         return nil
     end
 
-    return self.Flattened[animationId]
+    return self.Flattened[id]
 
 end
 
@@ -119,11 +282,7 @@ end
 
 function AnimationDatabase:Exists(animationId)
 
-    if not animationId then
-        return false
-    end
-
-    return self.Flattened[animationId] ~= nil
+    return self:Get(animationId) ~= nil
 
 end
 
@@ -139,7 +298,7 @@ function AnimationDatabase:GetReactionTime(animationId)
     if not data then
 
         if Config then
-            return Config.DefaultReactionTime
+            return Config.DefaultReactionTime or 0.1
         end
 
         return 0.1
@@ -223,13 +382,7 @@ end
 
 function AnimationDatabase:Add(animationId, data)
 
-    if not animationId or type(data) ~= "table" then
-        return false
-    end
-
-    self.Flattened[animationId] = table.clone(data)
-
-    return true
+    return self:AddInternal(animationId, data)
 
 end
 
@@ -240,15 +393,17 @@ end
 
 function AnimationDatabase:Remove(animationId)
 
-    if not animationId then
+    local id = self:NormalizeId(animationId)
+
+    if not id then
         return false
     end
 
-    if not self.Flattened[animationId] then
+    if not self.Flattened[id] then
         return false
     end
 
-    self.Flattened[animationId] = nil
+    self.Flattened[id] = nil
 
     return true
 
@@ -279,16 +434,16 @@ function AnimationDatabase:Initialize(config)
     self:Build()
 
     print(
-        "[AnimationDatabase] Loaded " ..
-        tostring(self:GetCount()) ..
-        " animations."
+        "[AnimationDatabase] Loaded "
+        .. tostring(self:GetCount())
+        .. " animations."
     )
 
 end
 
 
 --// =========================================================
---// RETURN
+--// MATCHA MODULE RESULT
 --// =========================================================
 
-return AnimationDatabase
+_G.__GakuranModuleResult = AnimationDatabase
