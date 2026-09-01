@@ -1,6 +1,7 @@
 --// =========================================================
 --// GAKURAN - ANIMATION TRACKER
 --// GitHub / Matcha Version
+--// Matcha-Safe Polling Edition
 --// =========================================================
 
 local Players = game:GetService("Players")
@@ -23,6 +24,24 @@ AnimationTracker.State = {
 AnimationTracker.Trackers = {}
 AnimationTracker.LocalTracker = nil
 AnimationTracker.Listeners = {}
+
+--// Prevent processing the same animation track repeatedly
+AnimationTracker.SeenTracks = {}
+
+
+--// =========================================================
+--// SAFE WAIT
+--// =========================================================
+
+local function SafeWait(seconds)
+
+    if task and task.wait then
+        task.wait(seconds)
+    elseif wait then
+        wait(seconds)
+    end
+
+end
 
 
 --// =========================================================
@@ -48,9 +67,11 @@ function AnimationTracker:AddListener(callback)
     end
 
     for _, listener in ipairs(self.Listeners) do
+
         if listener == callback then
             return false
         end
+
     end
 
     table.insert(self.Listeners, callback)
@@ -158,10 +179,20 @@ function AnimationTracker:ProcessAnimation(character, track)
     end
 
 
+    --// Get animation information
+
     local databaseData = nil
 
     if AnimationDatabase then
-        databaseData = AnimationDatabase:Get(animationId)
+
+        local success, result = pcall(function()
+            return AnimationDatabase:Get(animationId)
+        end)
+
+        if success then
+            databaseData = result
+        end
+
     end
 
 
@@ -207,6 +238,97 @@ end
 
 
 --// =========================================================
+--// CHECK PLAYING ANIMATIONS
+--// =========================================================
+
+function AnimationTracker:PollTracker(tracker)
+
+    if not tracker then
+        return
+    end
+
+    local animator = tracker.Animator
+
+    if not animator then
+        return
+    end
+
+
+    local success, tracks = pcall(function()
+
+        return animator:GetPlayingAnimationTracks()
+
+    end)
+
+
+    if not success or not tracks then
+        return
+    end
+
+
+    for _, track in ipairs(tracks) do
+
+        if track then
+
+            --// Each animation track is processed once
+            if not self.SeenTracks[track] then
+
+                self.SeenTracks[track] = true
+
+                task.spawn(function()
+
+                    self:ProcessAnimation(
+                        tracker.Character,
+                        track
+                    )
+
+                end)
+
+            end
+
+        end
+
+    end
+
+end
+
+
+--// =========================================================
+--// CLEAN OLD TRACKS
+--// =========================================================
+
+function AnimationTracker:CleanSeenTracks()
+
+    for track in pairs(self.SeenTracks) do
+
+        local stillValid = false
+
+        local success, playing = pcall(function()
+
+            if track.IsPlaying ~= nil then
+                return track.IsPlaying
+            end
+
+            return true
+
+        end)
+
+
+        if success and playing then
+            stillValid = true
+        end
+
+
+        if not stillValid then
+            self.SeenTracks[track] = nil
+        end
+
+    end
+
+end
+
+
+--// =========================================================
 --// TRACK CHARACTER
 --// =========================================================
 
@@ -230,19 +352,31 @@ function AnimationTracker:TrackCharacter(character)
 
     if not humanoid then
 
-        humanoid =
-            character:WaitForChild("Humanoid", 5)
+        local success, result = pcall(function()
+
+            return character:WaitForChild(
+                "Humanoid",
+                5
+            )
+
+        end)
+
+        if success then
+            humanoid = result
+        end
 
     end
 
 
     if not humanoid then
+
         warn(
-            "[AnimationTracker] No Humanoid found for " ..
-            character.Name
+            "[AnimationTracker] No Humanoid found for "
+            .. character.Name
         )
 
         return nil
+
     end
 
 
@@ -252,19 +386,31 @@ function AnimationTracker:TrackCharacter(character)
 
     if not animator then
 
-        animator =
-            humanoid:WaitForChild("Animator", 5)
+        local success, result = pcall(function()
+
+            return humanoid:WaitForChild(
+                "Animator",
+                5
+            )
+
+        end)
+
+        if success then
+            animator = result
+        end
 
     end
 
 
     if not animator then
+
         warn(
-            "[AnimationTracker] No Animator found for " ..
-            character.Name
+            "[AnimationTracker] No Animator found for "
+            .. character.Name
         )
 
         return nil
+
     end
 
 
@@ -276,7 +422,9 @@ function AnimationTracker:TrackCharacter(character)
 
         Animator = animator,
 
-        Connections = {}
+        Connections = {},
+
+        Running = true
 
     }
 
@@ -284,27 +432,9 @@ function AnimationTracker:TrackCharacter(character)
     self.Trackers[character] = tracker
 
 
-    --// Listen for new animations
+    --// Process animations already playing
 
-    tracker.Connections.AnimationPlayed =
-        animator.AnimationPlayed:Connect(function(track)
-
-            self:ProcessAnimation(character, track)
-
-        end)
-
-
-    --// Process animations that are already playing
-
-    for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-
-        task.spawn(function()
-
-            self:ProcessAnimation(character, track)
-
-        end)
-
-    end
+    self:PollTracker(tracker)
 
 
     return tracker
@@ -323,6 +453,9 @@ function AnimationTracker:UntrackCharacter(character)
     if not tracker then
         return
     end
+
+
+    tracker.Running = false
 
 
     for _, connection in pairs(tracker.Connections) do
@@ -360,8 +493,31 @@ function AnimationTracker:TrackLocalPlayer()
 
     if not character then
 
-        character =
-            player.CharacterAdded:Wait()
+        --// Don't use CharacterAdded:Wait()
+        --// because Matcha may not expose that event.
+
+        for _ = 1, 50 do
+
+            character = player.Character
+
+            if character then
+                break
+            end
+
+            SafeWait(0.1)
+
+        end
+
+    end
+
+
+    if not character then
+
+        warn(
+            "[AnimationTracker] Local character not found."
+        )
+
+        return nil
 
     end
 
@@ -398,8 +554,17 @@ function AnimationTracker:RefreshLocalPlayer()
     end
 
 
-    self.LocalTracker =
-        self:TrackCharacter(player.Character)
+    self.LocalTracker = nil
+
+
+    if player.Character then
+
+        self.LocalTracker =
+            self:TrackCharacter(
+                player.Character
+            )
+
+    end
 
 end
 
@@ -410,11 +575,25 @@ end
 
 function AnimationTracker:TrackCharacters()
 
-    for _, player in ipairs(Players:GetPlayers()) do
+    local success, players = pcall(function()
+
+        return Players:GetPlayers()
+
+    end)
+
+
+    if not success or not players then
+        return
+    end
+
+
+    for _, player in ipairs(players) do
 
         if player.Character then
 
-            self:TrackCharacter(player.Character)
+            self:TrackCharacter(
+                player.Character
+            )
 
         end
 
@@ -424,34 +603,150 @@ end
 
 
 --// =========================================================
---// WATCH CHARACTER
+--// WATCH CHARACTERS
+--// =========================================================
+
+--// Matcha-safe replacement for CharacterAdded:Connect()
+--// Character changes are detected through polling.
+
+function AnimationTracker:WatchCharacters()
+
+    if self.CharacterWatchRunning then
+        return
+    end
+
+
+    self.CharacterWatchRunning = true
+
+
+    task.spawn(function()
+
+        while self.State.Running do
+
+            local success, players = pcall(function()
+
+                return Players:GetPlayers()
+
+            end)
+
+
+            if success and players then
+
+                for _, player in ipairs(players) do
+
+                    if player.Character then
+
+                        if not self.Trackers[player.Character] then
+
+                            self:TrackCharacter(
+                                player.Character
+                            )
+
+                        end
+
+                    end
+
+                end
+
+            end
+
+
+            SafeWait(0.25)
+
+        end
+
+
+        self.CharacterWatchRunning = false
+
+    end)
+
+end
+
+
+--// =========================================================
+--// WATCH ANIMATIONS
+--// =========================================================
+
+function AnimationTracker:StartAnimationPolling()
+
+    if self.AnimationPollingRunning then
+        return
+    end
+
+
+    self.AnimationPollingRunning = true
+
+
+    task.spawn(function()
+
+        while self.State.Running do
+
+            for character, tracker in pairs(self.Trackers) do
+
+                if tracker
+                    and tracker.Running
+                    and character then
+
+                    local success = pcall(function()
+
+                        self:PollTracker(tracker)
+
+                    end)
+
+
+                    if not success then
+                        --// Ignore one failed poll.
+                        --// Tracker will be checked again.
+                    end
+
+                end
+
+            end
+
+
+            self:CleanSeenTracks()
+
+
+            --// 50ms polling interval
+            --// Fast enough for animation detection
+            --// without relying on AnimationPlayed.
+
+            SafeWait(0.05)
+
+        end
+
+
+        self.AnimationPollingRunning = false
+
+    end)
+
+end
+
+
+--// =========================================================
+--// COMPATIBILITY WATCH CHARACTER
 --// =========================================================
 
 function AnimationTracker:WatchCharacter(player)
 
     if not player then
-        return
+        return nil
     end
 
 
     if player.Character then
-        self:TrackCharacter(player.Character)
+
+        self:TrackCharacter(
+            player.Character
+        )
+
     end
 
 
-    local connection =
-        player.CharacterAdded:Connect(function(character)
+    --// No CharacterAdded connection.
+    --// CharacterWatch polling handles respawns.
 
-            task.wait(0.25)
-
-            if self.State.Running then
-                self:TrackCharacter(character)
-            end
-
-        end)
-
-
-    return connection
+    return nil
 
 end
 
@@ -460,7 +755,10 @@ end
 --// CHECK ANIMATION STATE
 --// =========================================================
 
-local function ContainsAnimation(animationList, animationId)
+local function ContainsAnimation(
+    animationList,
+    animationId
+)
 
     if not animationList then
         return false
@@ -566,6 +864,8 @@ function AnimationTracker:StopAll()
 
     self.LocalTracker = nil
 
+    self.SeenTracks = {}
+
 end
 
 
@@ -584,7 +884,12 @@ function AnimationTracker:Start()
 
 
     self:TrackLocalPlayer()
+
     self:TrackCharacters()
+
+    self:StartAnimationPolling()
+
+    self:WatchCharacters()
 
 
     print("[AnimationTracker] Started.")
@@ -605,7 +910,12 @@ function AnimationTracker:Stop()
 
     self.State.Running = false
 
+
     self:StopAll()
+
+
+    self.AnimationPollingRunning = false
+    self.CharacterWatchRunning = false
 
 
     print("[AnimationTracker] Stopped.")
@@ -627,7 +937,7 @@ end
 
 
 --// =========================================================
---// RETURN
+--// MATCHA MODULE RETURN
 --// =========================================================
 
-return AnimationTracker
+_G.__GakuranModuleResult = AnimationTracker
