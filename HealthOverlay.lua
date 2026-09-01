@@ -1,11 +1,10 @@
 --// =========================================================
 --// GAKURAN - HEALTH OVERLAY
 --// GitHub / Matcha Version
---// DRAWING API
+--// MATCHA DRAWING + WORLDTOSCREEN
 --// =========================================================
 
 local Players = game:GetService("Players")
-local Camera = workspace.CurrentCamera
 
 local HealthOverlay = {}
 
@@ -64,13 +63,11 @@ function HealthOverlay:Create(player)
         self:Remove(player)
     end
 
-
     local healthBar = Drawing.new("Square")
 
     healthBar.Visible = false
     healthBar.Filled = true
     healthBar.Thickness = 1
-
 
     local healthText = Drawing.new("Text")
 
@@ -79,7 +76,6 @@ function HealthOverlay:Create(player)
     healthText.Outline = true
     healthText.Size = 13
     healthText.Text = "100 / 100"
-
 
     self.Objects[player] = {
         HealthBar = healthBar,
@@ -100,7 +96,6 @@ function HealthOverlay:Remove(player)
         return
     end
 
-
     if object.HealthBar then
 
         pcall(function()
@@ -109,7 +104,6 @@ function HealthOverlay:Remove(player)
 
     end
 
-
     if object.Text then
 
         pcall(function()
@@ -117,7 +111,6 @@ function HealthOverlay:Remove(player)
         end)
 
     end
-
 
     self.Objects[player] = nil
 end
@@ -133,15 +126,52 @@ function HealthOverlay:Hide(object)
         return
     end
 
-
     if object.HealthBar then
         object.HealthBar.Visible = false
     end
 
-
     if object.Text then
         object.Text.Visible = false
     end
+end
+
+
+--// =========================================================
+--// WORLD TO SCREEN
+--// MATCHA COMPATIBILITY
+--// =========================================================
+
+function HealthOverlay:GetScreenPosition(position)
+
+    if type(WorldToScreen) ~= "function" then
+
+        warn(
+            "[HealthOverlay] Matcha WorldToScreen unavailable."
+        )
+
+        return nil, false
+    end
+
+    local success,
+          screenPosition,
+          onScreen =
+        pcall(function()
+
+            return WorldToScreen(position)
+
+        end)
+
+    if not success then
+
+        return nil, false
+    end
+
+    if not screenPosition then
+
+        return nil, false
+    end
+
+    return screenPosition, onScreen == true
 end
 
 
@@ -157,7 +187,6 @@ function HealthOverlay:UpdatePlayer(player)
         return
     end
 
-
     local character = player.Character
 
     if not character then
@@ -165,44 +194,43 @@ function HealthOverlay:UpdatePlayer(player)
         return
     end
 
-
     local humanoid =
         character:FindFirstChildOfClass("Humanoid")
 
     local root =
         character:FindFirstChild("HumanoidRootPart")
 
-
     if not humanoid or not root then
         self:Hide(object)
         return
     end
 
-
     local health = humanoid.Health
     local maxHealth = humanoid.MaxHealth
-
 
     if maxHealth <= 0 then
         maxHealth = 100
     end
-
 
     if health <= 0 then
         self:Hide(object)
         return
     end
 
+    --// =====================================================
+    --// MATCHA WORLD TO SCREEN
+    --// =====================================================
 
-    local screenPosition, onScreen =
-        Camera:WorldToViewportPoint(root.Position)
+    local screenPosition,
+          onScreen =
+        self:GetScreenPosition(root.Position)
 
+    if not screenPosition or not onScreen then
 
-    if not onScreen or screenPosition.Z <= 0 then
         self:Hide(object)
+
         return
     end
-
 
     local percentage =
         math.clamp(
@@ -211,10 +239,40 @@ function HealthOverlay:UpdatePlayer(player)
             1
         )
 
+    --// =====================================================
+    --// DISTANCE
+    --// =====================================================
 
-    --// Scale based on distance
+    local camera = workspace.CurrentCamera
 
-    local distance = screenPosition.Z
+    local distance = 50
+
+    if camera
+        and camera.Position
+    then
+
+        local success,
+              calculatedDistance =
+            pcall(function()
+
+                return (
+                    camera.Position -
+                    root.Position
+                ).Magnitude
+
+            end)
+
+        if success
+            and calculatedDistance
+        then
+
+            distance = calculatedDistance
+        end
+    end
+
+    --// =====================================================
+    --// SIZE
+    --// =====================================================
 
     local height =
         math.clamp(
@@ -223,23 +281,21 @@ function HealthOverlay:UpdatePlayer(player)
             90
         )
 
-
     local barWidth = 4
-
 
     local x =
         screenPosition.X - 35
 
-
     local y =
         screenPosition.Y - (height / 2)
-
 
     local barHeight =
         height * percentage
 
 
-    --// Health bar
+    --// =====================================================
+    --// HEALTH BAR
+    --// =====================================================
 
     object.HealthBar.Position =
         Vector2.new(
@@ -247,18 +303,18 @@ function HealthOverlay:UpdatePlayer(player)
             y + height - barHeight
         )
 
-
     object.HealthBar.Size =
         Vector2.new(
             barWidth,
             barHeight
         )
 
-
     object.HealthBar.Visible = true
 
 
-    --// Health text
+    --// =====================================================
+    --// HEALTH TEXT
+    --// =====================================================
 
     object.Text.Position =
         Vector2.new(
@@ -266,14 +322,12 @@ function HealthOverlay:UpdatePlayer(player)
             y - 15
         )
 
-
     object.Text.Text =
         string.format(
             "%.0f / %.0f",
             health,
             maxHealth
         )
-
 
     object.Text.Visible = true
 end
@@ -289,14 +343,11 @@ function HealthOverlay:Refresh()
         return
     end
 
-
     local currentPlayers = {}
-
 
     for _, player in ipairs(Players:GetPlayers()) do
 
         currentPlayers[player] = true
-
 
         if player ~= Players.LocalPlayer then
 
@@ -304,11 +355,9 @@ function HealthOverlay:Refresh()
                 self:Create(player)
             end
 
-
             self:UpdatePlayer(player)
         end
     end
-
 
     --// Remove players that left
 
@@ -334,11 +383,9 @@ function HealthOverlay:Poll()
         return
     end
 
-
     if not self.State.Enabled then
         return
     end
-
 
     pcall(function()
         self:Refresh()
@@ -355,10 +402,9 @@ function HealthOverlay:SetEnabled(enabled)
     self.State.Enabled =
         enabled == true
 
-
     if not self.State.Enabled then
 
-        for player, object in pairs(self.Objects) do
+        for _, object in pairs(self.Objects) do
             self:Hide(object)
         end
     end
@@ -381,8 +427,9 @@ function HealthOverlay:Start()
         return
     end
 
-
-    if not Drawing or not Drawing.new then
+    if not Drawing
+        or not Drawing.new
+    then
 
         warn(
             "[HealthOverlay] Drawing API unavailable."
@@ -391,12 +438,18 @@ function HealthOverlay:Start()
         return
     end
 
+    if type(WorldToScreen) ~= "function" then
+
+        warn(
+            "[HealthOverlay] Matcha WorldToScreen unavailable."
+        )
+
+        return
+    end
 
     self.State.Running = true
 
-
     self:Refresh()
-
 
     task.spawn(function()
 
@@ -411,8 +464,8 @@ function HealthOverlay:Start()
         end
     end)
 
-
     print("[HealthOverlay] Drawing API detected.")
+    print("[HealthOverlay] WorldToScreen detected.")
     print("[HealthOverlay] Started.")
 end
 
@@ -427,14 +480,11 @@ function HealthOverlay:Stop()
         return
     end
 
-
     self.State.Running = false
-
 
     for player in pairs(self.Objects) do
         self:Remove(player)
     end
-
 
     print("[HealthOverlay] Stopped.")
 end
