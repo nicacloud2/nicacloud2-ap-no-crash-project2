@@ -312,5 +312,4 @@ function HealthOverlay:Destroy()
     self:Stop()
 end
 
-_G.__GakuranModuleResult =
-    HealthOverlay
+_G.__GakuranModuleResult = HealthOverlay
