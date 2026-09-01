@@ -1,23 +1,21 @@
---// Gakuran Script - Main
---// Entry point
-
---==================================================
--- Services
---==================================================
+--// Gakuran Modular Project
+--// Main.lua
 
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 
 local LocalPlayer = Players.LocalPlayer
 
 --==================================================
--- Modules
+-- MODULES
 --==================================================
 
 local Config = require(script.Parent.Config)
 local AnimationDatabase = require(script.Parent.AnimationDatabase)
 local AnimationTracker = require(script.Parent.AnimationTracker)
-local ParryController = require(script.Parent.ParryController)
 local TargetManager = require(script.Parent.TargetManager)
+local ParryController = require(script.Parent.ParryController)
 local ESP = require(script.Parent.ESP)
 local HealthOverlay = require(script.Parent.HealthOverlay)
 local AutoPlay = require(script.Parent.AutoPlay)
@@ -25,153 +23,188 @@ local Logger = require(script.Parent.Logger)
 local UI = require(script.Parent.UI)
 
 --==================================================
--- Shared State
+-- SHARED STATE
 --==================================================
 
 local State = {
-    Alive = true,
+    Running = false,
+
+    LocalPlayer = LocalPlayer,
+
+    CurrentTarget = nil,
 
     Connections = {},
-    Drawings = {},
 
-    TargetCharacters = {},
-    EspTrackers = {},
-
-    AnimationRegistry = {},
-    AnimationIdSliders = {},
-
-    AnimationsLoggedCache = {},
-    AnimationsLoggedOrder = {},
-
-    HeldKeys = {},
-
-    CurrentTargetIndex = 1,
-
-    CurrentParryState = "idle",
-
-    LastPendingRegData = nil,
-
-    InputRegisteredTime = nil,
-    ParryRegisteredTime = nil,
-
-    LastOverlayUpdate = 0,
-    LastCycleCheck = 0,
+    Debug = false,
 }
 
 --==================================================
--- Initialization
+-- INITIALIZE MODULES
 --==================================================
 
-local function Initialize()
-    Logger:Initialize(Config)
-    Logger:Info("Starting Gakuran Script...")
+local function InitializeModules()
 
-    -- Load configuration
     Config:Initialize(State)
 
-    -- Load animation database
-    AnimationDatabase:Initialize(State)
+    AnimationTracker:Initialize(State)
+    TargetManager:Initialize(State)
 
-    -- Start animation tracking
-    AnimationTracker:Initialize(State, Config)
+    ParryController:Initialize(State)
 
-    -- Start target management
-    TargetManager:Initialize(State, Config)
+    ESP:Initialize(State)
+    HealthOverlay:Initialize(State)
 
-    -- Start ESP
-    ESP:Initialize(State, Config)
+    AutoPlay:Initialize(State)
+    Logger:Initialize(State)
 
-    -- Start health overlay
-    HealthOverlay:Initialize(State, Config)
+    UI:Initialize(State)
 
-    -- Start parry system
-    ParryController:Initialize(
-        State,
-        Config,
-        AnimationTracker,
-        TargetManager
-    )
-
-    -- Start autoplay
-    AutoPlay:Initialize(State, Config)
-
-    -- Start UI
-    UI:Initialize(
-        State,
-        Config,
-        TargetManager,
-        ParryController,
-        AutoPlay
-    )
-
-    Logger:Info("Gakuran Script loaded successfully.")
 end
 
 --==================================================
--- Cleanup
+-- START MODULES
+--==================================================
+
+local function StartModules()
+
+    TargetManager:Start()
+
+    AnimationTracker:TrackLocalPlayer()
+    AnimationTracker:TrackCharacters()
+
+    ParryController:Start()
+
+    ESP:Start()
+    HealthOverlay:Start()
+
+    AutoPlay:Start()
+
+    UI:Start()
+
+end
+
+--==================================================
+-- STOP MODULES
+--==================================================
+
+local function StopModules()
+
+    ParryController:Stop()
+
+    AnimationTracker:StopAll()
+
+    TargetManager:Stop()
+
+    ESP:Stop()
+    HealthOverlay:Stop()
+
+    AutoPlay:Stop()
+
+end
+
+--==================================================
+-- TARGET UPDATE
+--==================================================
+
+local function UpdateTarget()
+
+    local target = TargetManager:GetCurrentTarget()
+
+    State.CurrentTarget = target
+
+end
+
+--==================================================
+-- INPUT
+--==================================================
+
+local function SetupInput()
+
+    local connection = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+
+        if gameProcessed then
+            return
+        end
+
+        if input.KeyCode == Enum.KeyCode.X then
+            ParryController:Dodge()
+        end
+
+        if input.KeyCode == Enum.KeyCode.F then
+            ParryController:BlockStart()
+        end
+
+    end)
+
+    table.insert(State.Connections, connection)
+
+end
+
+--==================================================
+-- MAIN LOOP
+--==================================================
+
+local function StartLoop()
+
+    local connection = RunService.Heartbeat:Connect(function()
+
+        if not State.Running then
+            return
+        end
+
+        UpdateTarget()
+
+    end)
+
+    table.insert(State.Connections, connection)
+
+end
+
+--==================================================
+-- CLEANUP
 --==================================================
 
 local function Cleanup()
-    if not State.Alive then
-        return
-    end
 
-    State.Alive = false
+    State.Running = false
 
-    Logger:Info("Cleaning up...")
+    for _, connection in ipairs(State.Connections) do
 
-    for _, connection in pairs(State.Connections) do
         if connection then
-            pcall(function()
-                connection:Disconnect()
-            end)
+            connection:Disconnect()
         end
+
     end
 
     table.clear(State.Connections)
 
-    if ESP.Destroy then
-        ESP:Destroy(State)
-    end
+    StopModules()
 
-    if HealthOverlay.Destroy then
-        HealthOverlay:Destroy(State)
-    end
-
-    if AnimationTracker.Destroy then
-        AnimationTracker:Destroy(State)
-    end
-
-    if ParryController.Destroy then
-        ParryController:Destroy(State)
-    end
-
-    if AutoPlay.Destroy then
-        AutoPlay:Destroy(State)
-    end
-
-    if UI.Destroy then
-        UI:Destroy(State)
-    end
-
-    Logger:Info("Cleanup complete.")
 end
 
 --==================================================
--- Player Lifecycle
+-- STARTUP
 --==================================================
 
-LocalPlayer.CharacterRemoving:Connect(function()
-    State.Alive = false
-end)
+local function Start()
 
---==================================================
--- Start
---==================================================
+    if State.Running then
+        return
+    end
 
-local success, err = pcall(Initialize)
+    State.Running = true
 
-if not success then
-    warn("[Gakuran] Initialization failed:", err)
-    Cleanup()
+    InitializeModules()
+    StartModules()
+    SetupInput()
+    StartLoop()
+
+    print("[Gakuran] Main.lua started successfully.")
+
 end
+
+--==================================================
+-- RUN
+--==================================================
+
+Start()
