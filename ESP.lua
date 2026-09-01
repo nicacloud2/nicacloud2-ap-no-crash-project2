@@ -1,26 +1,23 @@
 --// =========================================================
 --// GAKURAN - ESP
 --// GitHub / Matcha Version
+--// Polling-Safe Edition
 --// =========================================================
 
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 
 local ESP = {}
 
---// Dependencies
 local Config = nil
 local TargetManager = nil
 
---// State
 ESP.State = {
     Running = false,
     Enabled = true
 }
 
 ESP.Objects = {}
-ESP.Connections = {}
-
+ESP.PollInterval = 0.15
 
 --// =========================================================
 --// DEPENDENCIES
@@ -31,7 +28,6 @@ function ESP:SetDependencies(config, targetManager)
     TargetManager = targetManager
 end
 
-
 --// =========================================================
 --// INITIALIZE
 --// =========================================================
@@ -41,7 +37,6 @@ function ESP:Initialize(state)
 
     print("[ESP] Initialized.")
 end
-
 
 --// =========================================================
 --// CREATE HIGHLIGHT
@@ -62,7 +57,6 @@ function ESP:CreateHighlight(player)
         return
     end
 
-    -- Remove old highlight
     self:RemoveHighlight(player)
 
     local highlight = Instance.new("Highlight")
@@ -70,7 +64,6 @@ function ESP:CreateHighlight(player)
     highlight.Name = "GakuranESP"
     highlight.Adornee = character
     highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-
     highlight.FillTransparency = 0.75
     highlight.OutlineTransparency = 0
 
@@ -79,7 +72,6 @@ function ESP:CreateHighlight(player)
     self.Objects[player] = highlight
 end
 
-
 --// =========================================================
 --// REMOVE HIGHLIGHT
 --// =========================================================
@@ -87,18 +79,19 @@ end
 function ESP:RemoveHighlight(player)
     local highlight = self.Objects[player]
 
-    if highlight then
-        pcall(function()
-            highlight:Destroy()
-        end)
-
-        self.Objects[player] = nil
+    if not highlight then
+        return
     end
+
+    pcall(function()
+        highlight:Destroy()
+    end)
+
+    self.Objects[player] = nil
 end
 
-
 --// =========================================================
---// REFRESH
+--// REFRESH PLAYERS
 --// =========================================================
 
 function ESP:Refresh()
@@ -106,20 +99,23 @@ function ESP:Refresh()
         return
     end
 
+    local currentPlayers = {}
+
     for _, player in ipairs(Players:GetPlayers()) do
+        currentPlayers[player] = true
 
         if player ~= Players.LocalPlayer then
-
             local character = player.Character
 
             if character then
-
-                local humanoid =
-                    character:FindFirstChildOfClass("Humanoid")
+                local humanoid = character:FindFirstChildOfClass("Humanoid")
 
                 if humanoid and humanoid.Health > 0 then
 
                     if not self.Objects[player] then
+                        self:CreateHighlight(player)
+
+                    elseif self.Objects[player].Adornee ~= character then
                         self:CreateHighlight(player)
                     end
 
@@ -133,16 +129,13 @@ function ESP:Refresh()
         end
     end
 
-    -- Remove players that no longer exist
+    --// Remove players that no longer exist
     for player in pairs(self.Objects) do
-
-        if not player.Parent then
+        if not currentPlayers[player] or not player.Parent then
             self:RemoveHighlight(player)
         end
-
     end
 end
-
 
 --// =========================================================
 --// TARGET HIGHLIGHT
@@ -153,8 +146,7 @@ function ESP:UpdateTarget()
         return
     end
 
-    local target =
-        TargetManager:GetCurrentTarget()
+    local target = TargetManager:GetCurrentTarget()
 
     for player, highlight in pairs(self.Objects) do
 
@@ -172,181 +164,97 @@ function ESP:UpdateTarget()
     end
 end
 
-
 --// =========================================================
---// PLAYER EVENTS
+--// POLL
 --// =========================================================
 
-function ESP:SetupPlayerEvents()
-
-    local playerAdded =
-        Players.PlayerAdded:Connect(function(player)
-
-            player.CharacterAdded:Connect(function()
-
-                task.wait(0.5)
-
-                if self.State.Running then
-                    self:CreateHighlight(player)
-                end
-
-            end)
-
-        end)
-
-    table.insert(
-        self.Connections,
-        playerAdded
-    )
-
-
-    local playerRemoving =
-        Players.PlayerRemoving:Connect(function(player)
-
-            self:RemoveHighlight(player)
-
-        end)
-
-    table.insert(
-        self.Connections,
-        playerRemoving
-    )
-
-
-    for _, player in ipairs(Players:GetPlayers()) do
-
-        if player ~= Players.LocalPlayer then
-
-            player.CharacterAdded:Connect(function()
-
-                task.wait(0.5)
-
-                if self.State.Running then
-                    self:CreateHighlight(player)
-                end
-
-            end)
-
-        end
+function ESP:Poll()
+    if not self.State.Running then
+        return
     end
+
+    if not self.State.Enabled then
+        return
+    end
+
+    self:Refresh()
+    self:UpdateTarget()
 end
 
-
 --// =========================================================
---// ENABLE
+--// ENABLE / DISABLE
 --// =========================================================
 
 function ESP:SetEnabled(enabled)
-
     self.State.Enabled = enabled == true
 
     if not self.State.Enabled then
-
         for player in pairs(self.Objects) do
             self:RemoveHighlight(player)
         end
-
     end
 end
-
 
 function ESP:IsEnabled()
     return self.State.Enabled
 end
-
 
 --// =========================================================
 --// START
 --// =========================================================
 
 function ESP:Start()
-
     if self.State.Running then
         return
     end
 
     self.State.Running = true
 
-    self:SetupPlayerEvents()
     self:Refresh()
+    self:UpdateTarget()
 
+    task.spawn(function()
+        while self.State.Running do
 
-    local connection =
-        RunService.Heartbeat:Connect(function()
+            pcall(function()
+                self:Poll()
+            end)
 
-            if not self.State.Running then
-                return
-            end
-
-            if not self.State.Enabled then
-                return
-            end
-
-            self:Refresh()
-            self:UpdateTarget()
-
-        end)
-
-    table.insert(
-        self.Connections,
-        connection
-    )
-
+            task.wait(self.PollInterval)
+        end
+    end)
 
     print("[ESP] Started.")
 end
-
 
 --// =========================================================
 --// STOP
 --// =========================================================
 
 function ESP:Stop()
-
     if not self.State.Running then
         return
     end
 
     self.State.Running = false
 
-
-    for _, connection in ipairs(self.Connections) do
-
-        if connection then
-
-            pcall(function()
-                connection:Disconnect()
-            end)
-
-        end
-
-    end
-
-    table.clear(self.Connections)
-
-
     for player in pairs(self.Objects) do
         self:RemoveHighlight(player)
     end
 
-
     print("[ESP] Stopped.")
 end
-
 
 --// =========================================================
 --// DESTROY
 --// =========================================================
 
 function ESP:Destroy()
-
     self:Stop()
-
 end
 
-
 --// =========================================================
---// RETURN
+--// MATCHA MODULE RESULT
 --// =========================================================
 
-return ESP
+_G.__GakuranModuleResult = ESP
