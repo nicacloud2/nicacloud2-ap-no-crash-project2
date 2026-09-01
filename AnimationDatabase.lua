@@ -1,89 +1,137 @@
 --// AnimationDatabase.lua
---// Gakuran Script - Animation Database
+--// Gakuran Animation Database Processor
+
+local Config = require(script.Parent.Config)
 
 local AnimationDatabase = {}
 
---==================================================
--- Animation Definitions
---==================================================
+--------------------------------------------------
+--// Flatten Game Config
+--------------------------------------------------
 
-AnimationDatabase.Animations = {
+function AnimationDatabase:Build()
+    local FlattenedConfig = {}
 
-    -- Example:
-    -- AttackName = {
-    --     Id = "123456789",
-    --     ReactionTime = 0.15,
-    -- },
+    for styleName, assets in pairs(Config.GameConfig) do
+        for assetId, data in pairs(assets) do
 
-}
+            -- Ignore special configuration values
+            if assetId == "M1Time" then
+                continue
+            end
 
---==================================================
--- Special Animations
---==================================================
+            local flatData = table.clone(data)
 
-AnimationDatabase.Special = {
-    ParriedAnimation = nil,
-    StunnedAnimation = nil,
-    ParryingAnimation = nil,
-    ParryFailed = nil,
-}
+            -- Store the fighting style
+            flatData.Style = styleName
 
---==================================================
--- Lookup Cache
---==================================================
+            --------------------------------------------------
+            --// Reaction Time
+            --------------------------------------------------
 
-AnimationDatabase.ById = {}
+            if data.DisplayName ~= "M2" and assets.M1Time then
 
---==================================================
--- Build Lookup
---==================================================
+                -- Use the style's M1Time
+                flatData.ReactionTime = assets.M1Time
 
-function AnimationDatabase:Initialize()
-    table.clear(self.ById)
+            elseif not data.ReactionTime then
 
-    for name, data in pairs(self.Animations) do
-        if data.Id then
-            self.ById[tostring(data.Id)] = {
-                Name = name,
-                Id = data.Id,
-                ReactionTime = data.ReactionTime,
-            }
+                -- Use the global default
+                flatData.DefaultReactionTime = Config.DefaultReactionTime
+
+            else
+
+                -- Use animation-specific reaction time
+                flatData.ReactionTime = data.ReactionTime
+            end
+
+            --------------------------------------------------
+            --// Save
+            --------------------------------------------------
+
+            FlattenedConfig[assetId] = flatData
         end
     end
+
+    return FlattenedConfig
 end
 
---==================================================
--- Get Animation
---==================================================
+--------------------------------------------------
+--// Build Database Immediately
+--------------------------------------------------
+
+AnimationDatabase.Flattened = AnimationDatabase:Build()
+
+--------------------------------------------------
+--// Lookup Animation
+--------------------------------------------------
 
 function AnimationDatabase:Get(animationId)
     if not animationId then
         return nil
     end
 
-    return self.ById[tostring(animationId)]
+    return self.Flattened[animationId]
 end
 
---==================================================
--- Get Reaction Time
---==================================================
+--------------------------------------------------
+--// Check Animation
+--------------------------------------------------
+
+function AnimationDatabase:Exists(animationId)
+    return self.Flattened[animationId] ~= nil
+end
+
+--------------------------------------------------
+--// Get Reaction Time
+--------------------------------------------------
 
 function AnimationDatabase:GetReactionTime(animationId)
-    local animation = self:Get(animationId)
+    local data = self:Get(animationId)
 
-    if not animation then
+    if not data then
+        return Config.DefaultReactionTime
+    end
+
+    return data.ReactionTime
+        or data.DefaultReactionTime
+        or Config.DefaultReactionTime
+end
+
+--------------------------------------------------
+--// Get Display Name
+--------------------------------------------------
+
+function AnimationDatabase:GetDisplayName(animationId)
+    local data = self:Get(animationId)
+
+    if not data then
         return nil
     end
 
-    return animation.ReactionTime
+    return data.DisplayName
 end
 
---==================================================
--- Check Animation
---==================================================
+--------------------------------------------------
+--// Get Fighting Style
+--------------------------------------------------
 
-function AnimationDatabase:Has(animationId)
-    return self:Get(animationId) ~= nil
+function AnimationDatabase:GetStyle(animationId)
+    local data = self:Get(animationId)
+
+    if not data then
+        return nil
+    end
+
+    return data.Style
+end
+
+--------------------------------------------------
+--// Get All Animations
+--------------------------------------------------
+
+function AnimationDatabase:GetAll()
+    return self.Flattened
 end
 
 return AnimationDatabase
