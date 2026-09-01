@@ -1,3 +1,9 @@
+--// =========================================================
+--// GAKURAN - HEALTH OVERLAY
+--// GitHub / Matcha Version
+--// Polling-Safe Edition
+--// =========================================================
+
 local Players = game:GetService("Players")
 
 local HealthOverlay = {}
@@ -13,17 +19,33 @@ HealthOverlay.State = {
 HealthOverlay.Objects = {}
 HealthOverlay.PollInterval = 0.15
 
+
+--// =========================================================
+--// DEPENDENCIES
+--// =========================================================
+
 function HealthOverlay:SetDependencies(config, targetManager)
     Config = config
     TargetManager = targetManager
 end
+
+
+--// =========================================================
+--// INITIALIZE
+--// =========================================================
 
 function HealthOverlay:Initialize(state)
     self.SharedState = state
     print("[HealthOverlay] Initialized.")
 end
 
+
+--// =========================================================
+--// CREATE
+--// =========================================================
+
 function HealthOverlay:Create(player)
+
     if not player then
         return
     end
@@ -56,6 +78,9 @@ function HealthOverlay:Create(player)
     billboard.ResetOnSpawn = false
     billboard.Parent = head
 
+
+    --// Background
+
     local background = Instance.new("Frame")
 
     background.Name = "Background"
@@ -64,6 +89,9 @@ function HealthOverlay:Create(player)
     background.BorderSizePixel = 0
     background.Parent = billboard
 
+
+    --// Health Bar
+
     local healthBar = Instance.new("Frame")
 
     healthBar.Name = "HealthBar"
@@ -71,6 +99,9 @@ function HealthOverlay:Create(player)
     healthBar.Position = UDim2.new(0, 0, 0, 0)
     healthBar.BorderSizePixel = 0
     healthBar.Parent = background
+
+
+    --// Health Text
 
     local text = Instance.new("TextLabel")
 
@@ -84,6 +115,7 @@ function HealthOverlay:Create(player)
     text.TextStrokeTransparency = 0.5
     text.Parent = billboard
 
+
     self.Objects[player] = {
         Billboard = billboard,
         Background = background,
@@ -92,7 +124,13 @@ function HealthOverlay:Create(player)
     }
 end
 
+
+--// =========================================================
+--// REMOVE
+--// =========================================================
+
 function HealthOverlay:Remove(player)
+
     local object = self.Objects[player]
 
     if not object then
@@ -100,15 +138,23 @@ function HealthOverlay:Remove(player)
     end
 
     if object.Billboard then
+
         pcall(function()
             object.Billboard:Destroy()
         end)
+
     end
 
     self.Objects[player] = nil
 end
 
+
+--// =========================================================
+--// UPDATE PLAYER
+--// =========================================================
+
 function HealthOverlay:UpdatePlayer(player)
+
     local object = self.Objects[player]
 
     if not object then
@@ -130,6 +176,7 @@ function HealthOverlay:UpdatePlayer(player)
         return
     end
 
+
     local maxHealth = humanoid.MaxHealth
     local health = humanoid.Health
 
@@ -137,12 +184,14 @@ function HealthOverlay:UpdatePlayer(player)
         maxHealth = 100
     end
 
+
     local percentage =
         math.clamp(
             health / maxHealth,
             0,
             1
         )
+
 
     object.HealthBar.Size =
         UDim2.new(
@@ -152,6 +201,7 @@ function HealthOverlay:UpdatePlayer(player)
             0
         )
 
+
     object.Text.Text =
         string.format(
             "%.0f / %.0f",
@@ -159,25 +209,36 @@ function HealthOverlay:UpdatePlayer(player)
             maxHealth
         )
 
+
     if health <= 0 then
         self:Remove(player)
     end
 end
 
+
+--// =========================================================
+--// REFRESH
+--// =========================================================
+
 function HealthOverlay:Refresh()
+
     if not self.State.Enabled then
         return
     end
 
+
     local currentPlayers = {}
+
 
     for _, player in ipairs(Players:GetPlayers()) do
 
         currentPlayers[player] = true
 
+
         if player ~= Players.LocalPlayer then
 
             local character = player.Character
+
 
             if character then
 
@@ -187,6 +248,7 @@ function HealthOverlay:Refresh()
                 local head =
                     character:FindFirstChild("Head")
 
+
                 if humanoid
                     and head
                     and humanoid.Health > 0
@@ -194,6 +256,7 @@ function HealthOverlay:Refresh()
 
                     local object =
                         self.Objects[player]
+
 
                     if not object then
 
@@ -206,6 +269,7 @@ function HealthOverlay:Refresh()
                         self:Create(player)
 
                     end
+
 
                     self:UpdatePlayer(player)
 
@@ -220,8 +284,13 @@ function HealthOverlay:Refresh()
                 self:Remove(player)
 
             end
+
         end
+
     end
+
+
+    --// Remove players that left
 
     for player in pairs(self.Objects) do
 
@@ -232,10 +301,17 @@ function HealthOverlay:Refresh()
             self:Remove(player)
 
         end
+
     end
 end
 
+
+--// =========================================================
+--// POLL
+--// =========================================================
+
 function HealthOverlay:Poll()
+
     if not self.State.Running then
         return
     end
@@ -244,14 +320,18 @@ function HealthOverlay:Poll()
         return
     end
 
-    pcall(function()
-        self:Refresh()
-    end)
+    self:Refresh()
 end
+
+
+--// =========================================================
+--// ENABLE
+--// =========================================================
 
 function HealthOverlay:SetEnabled(enabled)
 
     self.State.Enabled = enabled == true
+
 
     if not self.State.Enabled then
 
@@ -262,9 +342,17 @@ function HealthOverlay:SetEnabled(enabled)
     end
 end
 
+
 function HealthOverlay:IsEnabled()
+
     return self.State.Enabled
+
 end
+
+
+--// =========================================================
+--// START
+--// =========================================================
 
 function HealthOverlay:Start()
 
@@ -272,26 +360,34 @@ function HealthOverlay:Start()
         return
     end
 
+
     self.State.Running = true
 
     self:Refresh()
+
 
     task.spawn(function()
 
         while self.State.Running do
 
-            self:Poll()
+            pcall(function()
+                self:Poll()
+            end)
 
-            task.wait(
-                self.PollInterval
-            )
+            task.wait(self.PollInterval)
 
         end
 
     end)
 
+
     print("[HealthOverlay] Started.")
 end
+
+
+--// =========================================================
+--// STOP
+--// =========================================================
 
 function HealthOverlay:Stop()
 
@@ -299,17 +395,32 @@ function HealthOverlay:Stop()
         return
     end
 
+
     self.State.Running = false
+
 
     for player in pairs(self.Objects) do
         self:Remove(player)
     end
 
+
     print("[HealthOverlay] Stopped.")
 end
 
+
+--// =========================================================
+--// DESTROY
+--// =========================================================
+
 function HealthOverlay:Destroy()
+
     self:Stop()
+
 end
+
+
+--// =========================================================
+--// MATCHA MODULE RESULT
+--// =========================================================
 
 _G.__GakuranModuleResult = HealthOverlay
