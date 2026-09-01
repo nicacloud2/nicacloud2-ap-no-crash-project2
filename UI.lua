@@ -746,7 +746,7 @@ function UI:Start()
     )
 
     print(
-        "[UI] Waiting for Matcha toggle states..."
+        "[UI] Enabling toggle state polling immediately..."
     )
 
 
