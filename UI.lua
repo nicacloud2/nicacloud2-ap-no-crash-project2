@@ -2,7 +2,7 @@
 --// GAKURAN - UI
 --// GitHub / Matcha Version
 --// MATCHA NATIVE UI
---// POLLING SAFE EDITION
+--// CALLBACK + POLLING SAFE EDITION
 --// =========================================================
 
 local UI = {}
@@ -36,6 +36,10 @@ UI.LastEnabled = nil
 UI.LastAutoPlay = nil
 UI.LastESP = nil
 UI.LastHealth = nil
+
+--// Prevent initial UI creation from immediately
+--// changing module states before the UI is ready.
+UI.SettingsReady = false
 
 
 --// =========================================================
@@ -119,6 +123,147 @@ end
 
 
 --// =========================================================
+--// APPLY AUTOPLAY
+--// =========================================================
+
+function UI:SetAutoPlay(enabled)
+
+    if not AutoPlay then
+        return
+    end
+
+    enabled =
+        enabled == true
+
+    pcall(function()
+
+        if type(AutoPlay.SetEnabled) == "function" then
+
+            AutoPlay:SetEnabled(
+                enabled
+            )
+
+        end
+
+    end)
+
+    pcall(function()
+
+        if enabled then
+
+            if type(AutoPlay.Start) == "function"
+                and AutoPlay.State
+                and not AutoPlay.State.Running
+            then
+
+                AutoPlay:Start()
+
+            end
+
+        else
+
+            if type(AutoPlay.Stop) == "function"
+                and AutoPlay.State
+                and AutoPlay.State.Running
+            then
+
+                AutoPlay:Stop()
+
+            end
+
+        end
+
+    end)
+end
+
+
+--// =========================================================
+--// APPLY ESP
+--// =========================================================
+
+function UI:SetESP(enabled)
+
+    if not ESP then
+        return
+    end
+
+    enabled =
+        enabled == true
+
+    pcall(function()
+
+        if enabled then
+
+            if type(ESP.Start) == "function"
+                and ESP.State
+                and not ESP.State.Running
+            then
+
+                ESP:Start()
+
+            end
+
+        else
+
+            if type(ESP.Stop) == "function"
+                and ESP.State
+                and ESP.State.Running
+            then
+
+                ESP:Stop()
+
+            end
+
+        end
+
+    end)
+end
+
+
+--// =========================================================
+--// APPLY HEALTH OVERLAY
+--// =========================================================
+
+function UI:SetHealthOverlay(enabled)
+
+    if not HealthOverlay then
+        return
+    end
+
+    enabled =
+        enabled == true
+
+    pcall(function()
+
+        if enabled then
+
+            if type(HealthOverlay.Start) == "function"
+                and HealthOverlay.State
+                and not HealthOverlay.State.Running
+            then
+
+                HealthOverlay:Start()
+
+            end
+
+        else
+
+            if type(HealthOverlay.Stop) == "function"
+                and HealthOverlay.State
+                and HealthOverlay.State.Running
+            then
+
+                HealthOverlay:Stop()
+
+            end
+
+        end
+
+    end)
+end
+
+
+--// =========================================================
 --// CREATE INTERFACE
 --// =========================================================
 
@@ -187,7 +332,31 @@ function UI:CreateInterface()
 
                     controls:Toggle(
                         "gakuran_enabled",
-                        "Enabled"
+                        "Enabled",
+                        function(value)
+
+                            print(
+                                "[UI] Enabled changed:",
+                                value
+                            )
+
+                            self.State.Visible =
+                                value == true
+
+                            if not value then
+
+                                self:SetAutoPlay(false)
+                                self:SetESP(false)
+                                self:SetHealthOverlay(false)
+
+                            else
+
+                                self:SetESP(true)
+                                self:SetHealthOverlay(true)
+
+                            end
+
+                        end
                     )
 
 
@@ -201,19 +370,70 @@ function UI:CreateInterface()
                             "Right"
                         )
 
+
                     features:Toggle(
                         "gakuran_autoplay",
-                        "AutoPlay"
+                        "AutoPlay",
+                        function(value)
+
+                            print(
+                                "[UI] AutoPlay changed:",
+                                value
+                            )
+
+                            if self.State.Visible then
+
+                                self:SetAutoPlay(
+                                    value == true
+                                )
+
+                            end
+
+                        end
                     )
+
 
                     features:Toggle(
                         "gakuran_esp",
-                        "ESP"
+                        "ESP",
+                        function(value)
+
+                            print(
+                                "[UI] ESP changed:",
+                                value
+                            )
+
+                            if self.State.Visible then
+
+                                self:SetESP(
+                                    value == true
+                                )
+
+                            end
+
+                        end
                     )
+
 
                     features:Toggle(
                         "gakuran_health",
-                        "Health Overlay"
+                        "Health Overlay",
+                        function(value)
+
+                            print(
+                                "[UI] Health Overlay changed:",
+                                value
+                            )
+
+                            if self.State.Visible then
+
+                                self:SetHealthOverlay(
+                                    value == true
+                                )
+
+                            end
+
+                        end
                     )
 
 
@@ -311,106 +531,7 @@ end
 
 
 --// =========================================================
---// SET AUTOPLAY
---// =========================================================
-
-function UI:SetAutoPlay(enabled)
-
-    if not AutoPlay then
-        return
-    end
-
-    pcall(function()
-
-        AutoPlay:SetEnabled(
-            enabled
-        )
-
-    end)
-
-
-    pcall(function()
-
-        if enabled then
-
-            if not AutoPlay.State.Running then
-                AutoPlay:Start()
-            end
-
-        else
-
-            if AutoPlay.State.Running then
-                AutoPlay:Stop()
-            end
-
-        end
-
-    end)
-end
-
-
---// =========================================================
---// SET ESP
---// =========================================================
-
-function UI:SetESP(enabled)
-
-    if not ESP then
-        return
-    end
-
-    pcall(function()
-
-        if enabled then
-
-            if not ESP.State.Running then
-                ESP:Start()
-            end
-
-        else
-
-            if ESP.State.Running then
-                ESP:Stop()
-            end
-
-        end
-
-    end)
-end
-
-
---// =========================================================
---// SET HEALTH OVERLAY
---// =========================================================
-
-function UI:SetHealthOverlay(enabled)
-
-    if not HealthOverlay then
-        return
-    end
-
-    pcall(function()
-
-        if enabled then
-
-            if not HealthOverlay.State.Running then
-                HealthOverlay:Start()
-            end
-
-        else
-
-            if HealthOverlay.State.Running then
-                HealthOverlay:Stop()
-            end
-
-        end
-
-    end)
-end
-
-
---// =========================================================
---// UPDATE
+--// POLLING FALLBACK
 --// =========================================================
 
 function UI:Update()
@@ -420,9 +541,20 @@ function UI:Update()
     end
 
 
-    --// =====================================================
+    --// ---------------------------------------------------------
+    --// Do not poll during the initial UI creation frame.
+    --// This prevents GetValue() fallback values from overriding
+    --// the module states immediately after startup.
+    --// ---------------------------------------------------------
+
+    if not self.SettingsReady then
+        return
+    end
+
+
+    --// =========================================================
     --// MASTER ENABLE
-    --// =====================================================
+    --// =========================================================
 
     local enabled =
         self:GetSetting(
@@ -430,8 +562,11 @@ function UI:Update()
             true
         )
 
-    self.State.Visible =
+    enabled =
         enabled == true
+
+    self.State.Visible =
+        enabled
 
 
     if self.LastEnabled ~= enabled then
@@ -446,9 +581,9 @@ function UI:Update()
     end
 
 
-    --// =====================================================
+    --// =========================================================
     --// AUTOPLAY
-    --// =====================================================
+    --// =========================================================
 
     local autoplay =
         self:GetSetting(
@@ -456,9 +591,11 @@ function UI:Update()
             false
         )
 
+    autoplay =
+        autoplay == true
+
 
     if not enabled then
-
         autoplay = false
     end
 
@@ -472,17 +609,16 @@ function UI:Update()
 
         self.LastAutoPlay =
             autoplay
+
+        self:SetAutoPlay(
+            autoplay
+        )
     end
 
 
-    self:SetAutoPlay(
-        autoplay
-    )
-
-
-    --// =====================================================
+    --// =========================================================
     --// ESP
-    --// =====================================================
+    --// =========================================================
 
     local esp =
         self:GetSetting(
@@ -490,9 +626,11 @@ function UI:Update()
             true
         )
 
+    esp =
+        esp == true
+
 
     if not enabled then
-
         esp = false
     end
 
@@ -506,17 +644,16 @@ function UI:Update()
 
         self.LastESP =
             esp
+
+        self:SetESP(
+            esp
+        )
     end
 
 
-    self:SetESP(
-        esp
-    )
-
-
-    --// =====================================================
+    --// =========================================================
     --// HEALTH
-    --// =====================================================
+    --// =========================================================
 
     local health =
         self:GetSetting(
@@ -524,9 +661,11 @@ function UI:Update()
             true
         )
 
+    health =
+        health == true
+
 
     if not enabled then
-
         health = false
     end
 
@@ -540,12 +679,11 @@ function UI:Update()
 
         self.LastHealth =
             health
+
+        self:SetHealthOverlay(
+            health
+        )
     end
-
-
-    self:SetHealthOverlay(
-        health
-    )
 end
 
 
@@ -607,6 +745,22 @@ function UI:Start()
         "[UI] Interface creation SUCCESS."
     )
 
+    print(
+        "[UI] Waiting for Matcha toggle states..."
+    )
+
+
+    --// Give Matcha's UI binding a moment to initialize.
+    task.wait(0.15)
+
+    self.SettingsReady =
+        true
+
+
+    print(
+        "[UI] Toggle state polling enabled."
+    )
+
 
     task.spawn(function()
 
@@ -648,18 +802,31 @@ function UI:Stop()
     self.State.Running =
         false
 
+    self.SettingsReady =
+        false
 
+
+    --// ---------------------------------------------------------
     --// Stop managed modules
+    --// ---------------------------------------------------------
 
     if AutoPlay then
 
         pcall(function()
 
-            AutoPlay:SetEnabled(
-                false
-            )
+            if type(AutoPlay.SetEnabled) == "function" then
 
-            AutoPlay:Stop()
+                AutoPlay:SetEnabled(
+                    false
+                )
+
+            end
+
+            if type(AutoPlay.Stop) == "function" then
+
+                AutoPlay:Stop()
+
+            end
 
         end)
 
@@ -670,7 +837,11 @@ function UI:Stop()
 
         pcall(function()
 
-            ESP:Stop()
+            if type(ESP.Stop) == "function" then
+
+                ESP:Stop()
+
+            end
 
         end)
 
@@ -681,14 +852,20 @@ function UI:Stop()
 
         pcall(function()
 
-            HealthOverlay:Stop()
+            if type(HealthOverlay.Stop) == "function" then
+
+                HealthOverlay:Stop()
+
+            end
 
         end)
 
     end
 
 
+    --// ---------------------------------------------------------
     --// Remove Matcha tab
+    --// ---------------------------------------------------------
 
     local matchaUI =
         self.MatchaUI
