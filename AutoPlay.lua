@@ -1,19 +1,26 @@
 --// =========================================================
 --// GAKURAN - AUTOPLAY
 --// GitHub / Matcha Version
+--// MATCHA SAFE VERSION
 --// =========================================================
 
 local Players = game:GetService("Players")
-local VirtualInputManager = game:GetService("VirtualInputManager")
 
 local AutoPlay = {}
 
---// Dependencies
+--// =========================================================
+--// DEPENDENCIES
+--// =========================================================
+
 local Config = nil
 local TargetManager = nil
 local ParryController = nil
 
---// State
+
+--// =========================================================
+--// STATE
+--// =========================================================
+
 AutoPlay.State = {
     Running = false,
     Enabled = false
@@ -21,6 +28,7 @@ AutoPlay.State = {
 
 AutoPlay.LastAction = 0
 AutoPlay.ActionCooldown = 0.1
+AutoPlay.ProcessInterval = 0.03
 
 
 --// =========================================================
@@ -32,9 +40,12 @@ function AutoPlay:SetDependencies(
     targetManager,
     parryController
 )
+
     Config = config
     TargetManager = targetManager
     ParryController = parryController
+
+    print("[AutoPlay] Dependencies received.")
 end
 
 
@@ -43,6 +54,7 @@ end
 --// =========================================================
 
 function AutoPlay:Initialize(state)
+
     self.SharedState = state
 
     print("[AutoPlay] Initialized.")
@@ -55,7 +67,8 @@ end
 
 function AutoPlay:GetCharacter()
 
-    local player = Players.LocalPlayer
+    local player =
+        Players.LocalPlayer
 
     if not player then
         return nil
@@ -67,7 +80,8 @@ end
 
 function AutoPlay:GetHumanoid()
 
-    local character = self:GetCharacter()
+    local character =
+        self:GetCharacter()
 
     if not character then
         return nil
@@ -87,13 +101,15 @@ function AutoPlay:GetTarget()
         return nil
     end
 
-    if not TargetManager.GetCurrentTarget then
+    if type(TargetManager.GetCurrentTarget) ~= "function" then
         return nil
     end
 
     local success, target =
         pcall(function()
+
             return TargetManager:GetCurrentTarget()
+
         end)
 
     if success then
@@ -110,11 +126,15 @@ end
 
 function AutoPlay:GetTargetCharacter()
 
-    local target = self:GetTarget()
+    local target =
+        self:GetTarget()
 
     if not target then
         return nil
     end
+
+
+    --// Player target
 
     if typeof(target) == "Instance" then
 
@@ -166,41 +186,79 @@ function AutoPlay:Attack()
         return false
     end
 
-    local now = os.clock()
-
-    if now - self.LastAction < self.ActionCooldown then
+    if not self.State.Enabled then
         return false
     end
+
+
+    local now =
+        os.clock()
+
+    if now - self.LastAction
+        < self.ActionCooldown
+    then
+
+        return false
+
+    end
+
 
     self.LastAction = now
 
 
-    --// Mouse 1
+    --// =====================================================
+    --// MATCHA INPUT
+    --// =====================================================
+
+    local VirtualInputManager = nil
+
     pcall(function()
 
-        VirtualInputManager:SendMouseButtonEvent(
-            0,
-            0,
-            0,
-            true,
-            game,
-            0
-        )
-
-        task.wait(0.03)
-
-        VirtualInputManager:SendMouseButtonEvent(
-            0,
-            0,
-            0,
-            false,
-            game,
-            0
-        )
+        VirtualInputManager =
+            game:GetService(
+                "VirtualInputManager"
+            )
 
     end)
 
-    return true
+
+    if not VirtualInputManager then
+
+        warn(
+            "[AutoPlay] VirtualInputManager unavailable."
+        )
+
+        return false
+    end
+
+
+    local success =
+        pcall(function()
+
+            VirtualInputManager:SendMouseButtonEvent(
+                0,
+                0,
+                0,
+                true,
+                game,
+                0
+            )
+
+            task.wait(0.03)
+
+            VirtualInputManager:SendMouseButtonEvent(
+                0,
+                0,
+                0,
+                false,
+                game,
+                0
+            )
+
+        end)
+
+
+    return success
 end
 
 
@@ -210,17 +268,31 @@ end
 
 function AutoPlay:Block()
 
+    if not self.State.Running then
+        return false
+    end
+
+    if not self.State.Enabled then
+        return false
+    end
+
+
     if ParryController
-        and ParryController.BlockStart then
+        and type(ParryController.BlockStart)
+            == "function"
+    then
 
-        pcall(function()
-            ParryController:BlockStart(
-                os.clock(),
-                0.27
-            )
-        end)
+        local success =
+            pcall(function()
 
-        return true
+                ParryController:BlockStart(
+                    os.clock(),
+                    0.27
+                )
+
+            end)
+
+        return success
     end
 
     return false
@@ -233,14 +305,28 @@ end
 
 function AutoPlay:Dodge()
 
+    if not self.State.Running then
+        return false
+    end
+
+    if not self.State.Enabled then
+        return false
+    end
+
+
     if ParryController
-        and ParryController.Dodge then
+        and type(ParryController.Dodge)
+            == "function"
+    then
 
-        pcall(function()
-            ParryController:Dodge()
-        end)
+        local success =
+            pcall(function()
 
-        return true
+                ParryController:Dodge()
+
+            end)
+
+        return success
     end
 
     return false
@@ -266,7 +352,6 @@ end
 function AutoPlay:IsEnabled()
 
     return self.State.Enabled
-
 end
 
 
@@ -284,12 +369,55 @@ function AutoPlay:Process()
         return
     end
 
+
     if not self:HasTarget() then
         return
     end
 
+
     --// Attack
+
     self:Attack()
+end
+
+
+--// =========================================================
+--// PROCESS LOOP
+--// =========================================================
+
+function AutoPlay:StartProcessLoop()
+
+    if self.ProcessLoopRunning then
+        return
+    end
+
+    self.ProcessLoopRunning = true
+
+
+    task.spawn(function()
+
+        while self.State.Running do
+
+            if self.State.Enabled then
+
+                pcall(function()
+
+                    self:Process()
+
+                end)
+
+            end
+
+            task.wait(
+                self.ProcessInterval
+            )
+        end
+
+
+        self.ProcessLoopRunning = false
+
+    end)
+
 end
 
 
@@ -303,9 +431,15 @@ function AutoPlay:Start()
         return
     end
 
+
     self.State.Running = true
 
+
+    self:StartProcessLoop()
+
+
     print("[AutoPlay] Started.")
+    print("[AutoPlay] Process loop started.")
 end
 
 
@@ -319,7 +453,9 @@ function AutoPlay:Stop()
         return
     end
 
+
     self.State.Running = false
+
 
     print("[AutoPlay] Stopped.")
 end
@@ -336,5 +472,11 @@ function AutoPlay:Reset()
 
 end
 
+
+--// =========================================================
+--// MATCHA MODULE RESULT
+--// =========================================================
+
+_G.__GakuranModuleResult = AutoPlay
 
 return AutoPlay
