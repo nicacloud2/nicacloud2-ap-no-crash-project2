@@ -88,7 +88,7 @@ Config.IgnoreIds = {}
 
 Config.GameConfig = {
 
-```
+
 ["KarateAnims"] = {
     ["rbxassetid://137837926745158"] = {
         DisplayName = "1stM1",
@@ -497,7 +497,7 @@ Config.GameConfig = {
         ReactionTime = 0.3
     }
 }
-```
+
 
 }
 
