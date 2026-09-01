@@ -1,11 +1,8 @@
 --// =========================================================
 --// GAKURAN - UI
 --// GitHub / Matcha Version
---// MATCHA SAFE UI
+--// MATCHA NATIVE UI
 --// =========================================================
-
-local Players = game:GetService("Players")
-local UserInputService = game:GetService("UserInputService")
 
 local UI = {}
 
@@ -24,16 +21,7 @@ UI.State = {
     Visible = true
 }
 
-UI.ScreenGui = nil
-UI.MainFrame = nil
-UI.StatusLabel = nil
-UI.TargetLabel = nil
-UI.AutoPlayButton = nil
-UI.ESPButton = nil
-UI.HealthButton = nil
-
 UI.PollInterval = 0.1
-
 
 --// =========================================================
 --// DEPENDENCIES
@@ -59,7 +47,6 @@ function UI:SetDependencies(
     print("[UI] Dependencies received.")
 end
 
-
 --// =========================================================
 --// INITIALIZE
 --// =========================================================
@@ -72,408 +59,139 @@ function UI:Initialize(state)
 
 end
 
-
 --// =========================================================
---// SAFE INSTANCE CREATION
+--// SAFE VALUE
 --// =========================================================
 
-function UI:Create(className, properties, parent)
+function UI:GetValue(id, default)
 
-    local success, object = pcall(function()
+    local success, value = pcall(function()
 
-        local creator = game
-
-        if not creator then
-            error("game unavailable")
-        end
-
-        local instanceService = game:GetService("CoreGui")
-
-        if not instanceService then
-            error("CoreGui unavailable")
-        end
-
-        -- Try Instance.new first through the global environment.
-        if Instance and Instance.new then
-
-            local obj = Instance.new(className)
-
-            for property, value in pairs(properties or {}) do
-
-                pcall(function()
-                    obj[property] = value
-                end)
-
-            end
-
-            obj.Parent = parent
-
-            return obj
-
-        end
-
-        error("Instance.new unavailable")
+        return UI.GetValue(id)
 
     end)
 
-    if not success then
-
-        warn(
-            "[UI] Failed to create "
-            .. tostring(className)
-            .. ": "
-            .. tostring(object)
-        )
-
-        return nil
-
+    if success and value ~= nil then
+        return value
     end
 
-    return object
+    return default
 
 end
 
-
 --// =========================================================
---// FIND UI PARENT
---// =========================================================
-
-function UI:GetUIParent()
-
-    --// Try CoreGui
-    local success, coreGui = pcall(function()
-        return game:GetService("CoreGui")
-    end)
-
-    if success and coreGui then
-        print("[UI] CoreGui found.")
-        return coreGui
-    end
-
-
-    --// Fallback PlayerGui
-    local player = Players.LocalPlayer
-
-    if not player then
-        warn("[UI] LocalPlayer unavailable.")
-        return nil
-    end
-
-
-    local playerGui
-
-    local guiSuccess = pcall(function()
-
-        playerGui = player:FindFirstChildOfClass(
-            "PlayerGui"
-        )
-
-    end)
-
-
-    if guiSuccess and playerGui then
-
-        print("[UI] PlayerGui found.")
-
-        return playerGui
-
-    end
-
-
-    warn("[UI] No valid UI parent found.")
-
-    return nil
-
-end
-
-
---// =========================================================
---// CREATE UI
+--// CREATE MATCHA UI
 --// =========================================================
 
 function UI:CreateInterface()
 
-    if self.ScreenGui then
-
-        print("[UI] Interface already exists.")
-
-        return true
-
-    end
-
-
-    local player = Players.LocalPlayer
-
-    if not player then
-
-        warn("[UI] LocalPlayer not available.")
-
+    if not UI then
+        warn("[UI] UI library unavailable.")
         return false
-
     end
 
-
-    print(
-        "[UI] LocalPlayer found: "
-        .. tostring(player.Name)
-    )
-
-
-    local parent = self:GetUIParent()
-
-    if not parent then
-
-        warn("[UI] UI parent unavailable.")
-
+    if type(UI.AddTab) ~= "function" then
+        warn("[UI] Matcha UI.AddTab unavailable.")
         return false
-
     end
 
+    print("[UI] Creating Matcha UI...")
 
-    print("[UI] Creating ScreenGui...")
+    UI.AddTab("Gakuran", function(tab)
 
+        --// =================================================
+        --// STATUS
+        --// =================================================
 
-    self.ScreenGui = self:Create(
-        "ScreenGui",
-        {
-            Name = "GakuranUI",
-            ResetOnSpawn = false,
-            Enabled = true,
-            DisplayOrder = 999
-        },
-        parent
-    )
+        local status = tab:Section(
+            "Status",
+            "Left"
+        )
 
+        status:Label(
+            "Gakuran Matcha Interface"
+        )
 
-    if not self.ScreenGui then
+        status:Label(
+            "Status: Running"
+        )
 
-        warn("[UI] Failed to create ScreenGui.")
+        status:Label(
+            "Target information is shown here."
+        )
 
-        return false
+        --// =================================================
+        --// CONTROLS
+        --// =================================================
 
-    end
+        local controls = tab:Section(
+            "Controls",
+            "Left"
+        )
 
+        controls:Toggle(
+            "gakuran_ui_enabled",
+            "Enabled"
+        )
 
-    print("[UI] ScreenGui created.")
+        controls:Keybind(
+            "gakuran_ui_enabled_kb",
+            0x46,
+            "hold"
+        )
 
+        --// =================================================
+        --// FEATURES
+        --// =================================================
 
-    --// =====================================================
-    --// MAIN FRAME
-    --// =====================================================
+        local features = tab:Section(
+            "Features",
+            "Right"
+        )
 
-    self.MainFrame = self:Create(
-        "Frame",
-        {
-            Name = "Main",
-            Size = UDim2.new(0, 300, 0, 250),
-            Position = UDim2.new(
-                0.5,
-                -150,
-                0.5,
-                -125
-            ),
-            BackgroundTransparency = 0.08,
-            BorderSizePixel = 0,
-            Active = true,
-            Visible = true
-        },
-        self.ScreenGui
-    )
+        features:Toggle(
+            "gakuran_autoplay",
+            "AutoPlay"
+        )
 
+        features:Toggle(
+            "gakuran_esp",
+            "ESP"
+        )
 
-    if not self.MainFrame then
+        features:Toggle(
+            "gakuran_health",
+            "Health Overlay"
+        )
 
-        warn("[UI] Failed to create MainFrame.")
+        --// =================================================
+        --// INFORMATION
+        --// =================================================
 
-        return false
+        local information = tab:Section(
+            "Information",
+            "Right"
+        )
 
-    end
+        information:Label(
+            "Gakuran Project"
+        )
 
+        information:Label(
+            "Matcha Native UI"
+        )
 
-    --// =====================================================
-    --// TITLE
-    --// =====================================================
+        information:Label(
+            "Modules loaded externally."
+        )
 
-    self:Create(
-        "TextLabel",
-        {
-            Name = "Title",
-            Size = UDim2.new(1, 0, 0, 40),
-            BackgroundTransparency = 1,
-            Text = "GAKURAN",
-            TextSize = 20,
-            Font = Enum.Font.GothamBold,
-            TextColor3 = Color3.fromRGB(
-                255,
-                255,
-                255
-            ),
-            TextXAlignment = Enum.TextXAlignment.Center,
-            TextYAlignment = Enum.TextYAlignment.Center
-        },
-        self.MainFrame
-    )
+    end)
 
-
-    --// =====================================================
-    --// STATUS
-    --// =====================================================
-
-    self.StatusLabel = self:Create(
-        "TextLabel",
-        {
-            Name = "Status",
-            Size = UDim2.new(1, -20, 0, 25),
-            Position = UDim2.new(0, 10, 0, 42),
-            BackgroundTransparency = 1,
-            Text = "STATUS: RUNNING",
-            TextSize = 13,
-            Font = Enum.Font.Gotham,
-            TextColor3 = Color3.fromRGB(
-                255,
-                255,
-                255
-            ),
-            TextXAlignment = Enum.TextXAlignment.Left
-        },
-        self.MainFrame
-    )
-
-
-    --// =====================================================
-    --// TARGET
-    --// =====================================================
-
-    self.TargetLabel = self:Create(
-        "TextLabel",
-        {
-            Name = "Target",
-            Size = UDim2.new(1, -20, 0, 25),
-            Position = UDim2.new(0, 10, 0, 67),
-            BackgroundTransparency = 1,
-            Text = "TARGET: NONE",
-            TextSize = 13,
-            Font = Enum.Font.Gotham,
-            TextColor3 = Color3.fromRGB(
-                255,
-                255,
-                255
-            ),
-            TextXAlignment = Enum.TextXAlignment.Left
-        },
-        self.MainFrame
-    )
-
-
-    --// =====================================================
-    --// AUTOPLAY
-    --// =====================================================
-
-    self.AutoPlayButton = self:Create(
-        "TextButton",
-        {
-            Name = "AutoPlay",
-            Size = UDim2.new(1, -20, 0, 35),
-            Position = UDim2.new(0, 10, 0, 100),
-            BackgroundTransparency = 0.1,
-            BorderSizePixel = 0,
-            Text = "AUTOPLAY: OFF",
-            TextSize = 13,
-            Font = Enum.Font.GothamBold,
-            TextColor3 = Color3.fromRGB(
-                255,
-                255,
-                255
-            ),
-            AutoButtonColor = true
-        },
-        self.MainFrame
-    )
-
-
-    --// =====================================================
-    --// ESP
-    --// =====================================================
-
-    self.ESPButton = self:Create(
-        "TextButton",
-        {
-            Name = "ESP",
-            Size = UDim2.new(1, -20, 0, 35),
-            Position = UDim2.new(0, 10, 0, 140),
-            BackgroundTransparency = 0.1,
-            BorderSizePixel = 0,
-            Text = "ESP: ON",
-            TextSize = 13,
-            Font = Enum.Font.GothamBold,
-            TextColor3 = Color3.fromRGB(
-                255,
-                255,
-                255
-            ),
-            AutoButtonColor = true
-        },
-        self.MainFrame
-    )
-
-
-    --// =====================================================
-    --// HEALTH
-    --// =====================================================
-
-    self.HealthButton = self:Create(
-        "TextButton",
-        {
-            Name = "Health",
-            Size = UDim2.new(1, -20, 0, 35),
-            Position = UDim2.new(0, 10, 0, 180),
-            BackgroundTransparency = 0.1,
-            BorderSizePixel = 0,
-            Text = "HEALTH: ON",
-            TextSize = 13,
-            Font = Enum.Font.GothamBold,
-            TextColor3 = Color3.fromRGB(
-                255,
-                255,
-                255
-            ),
-            AutoButtonColor = true
-        },
-        self.MainFrame
-    )
-
-
-    --// =====================================================
-    --// FOOTER
-    --// =====================================================
-
-    self:Create(
-        "TextLabel",
-        {
-            Name = "Footer",
-            Size = UDim2.new(1, -20, 0, 20),
-            Position = UDim2.new(0, 10, 0, 220),
-            BackgroundTransparency = 1,
-            Text = "[ RightShift ] Toggle UI",
-            TextSize = 11,
-            Font = Enum.Font.Gotham,
-            TextColor3 = Color3.fromRGB(
-                200,
-                200,
-                200
-            ),
-            TextXAlignment = Enum.TextXAlignment.Center
-        },
-        self.MainFrame
-    )
-
-
-    print("[UI] All interface objects created.")
+    print("[UI] Matcha UI created.")
 
     return true
 
 end
-
 
 --// =========================================================
 --// UPDATE
@@ -485,156 +203,107 @@ function UI:Update()
         return
     end
 
-    if not self.MainFrame then
-        return
-    end
+    --// Read UI values safely
 
-
-    --// Target display
-
-    if TargetManager
-        and TargetManager.GetCurrentTarget then
-
-        local success, target =
-            pcall(function()
-
-                return TargetManager:GetCurrentTarget()
-
-            end)
-
-
-        if success and target then
-
-            local name = "UNKNOWN"
-
-            if typeof(target) == "Instance" then
-
-                name = target.Name
-
-            end
-
-
-            if self.TargetLabel then
-
-                self.TargetLabel.Text =
-                    "TARGET: " .. name
-
-            end
-
-        else
-
-            if self.TargetLabel then
-
-                self.TargetLabel.Text =
-                    "TARGET: NONE"
-
-            end
-
-        end
-
-    end
-
-
-    --// Status
-
-    if self.StatusLabel then
-
-        self.StatusLabel.Text =
-            "STATUS: "
-            .. (
-                self.State.Running
-                and "RUNNING"
-                or "STOPPED"
-            )
-
-    end
-
-
-    --// Visibility
-
-    if self.ScreenGui then
-
-        pcall(function()
-            self.ScreenGui.Enabled = true
-        end)
-
-    end
-
-
-    if self.MainFrame then
-
-        pcall(function()
-
-            self.MainFrame.Visible =
-                self.State.Visible
-
-        end)
-
-    end
-
-end
-
-
---// =========================================================
---// KEYBOARD
---// =========================================================
-
-function UI:CheckKeyboard()
-
-    local success, pressed =
-        pcall(function()
-
-            return UserInputService:IsKeyDown(
-                Enum.KeyCode.RightShift
-            )
-
-        end)
-
-
-    if not success then
-        return
-    end
-
-
-    if pressed and not self.RightShiftDown then
-
-        self.RightShiftDown = true
-
-        self:Toggle()
-
-        print(
-            "[UI] RightShift:",
-            self.State.Visible
+    local enabled =
+        self:GetValue(
+            "gakuran_ui_enabled",
+            true
         )
 
-    elseif not pressed then
+    local autoplay =
+        self:GetValue(
+            "gakuran_autoplay",
+            false
+        )
 
-        self.RightShiftDown = false
+    local esp =
+        self:GetValue(
+            "gakuran_esp",
+            true
+        )
+
+    local health =
+        self:GetValue(
+            "gakuran_health",
+            true
+        )
+
+    self.State.Visible = enabled
+
+    --// AutoPlay state
+
+    if AutoPlay then
+
+        pcall(function()
+
+            if autoplay then
+
+                if not AutoPlay.State.Running then
+                    AutoPlay:Start()
+                end
+
+            else
+
+                if AutoPlay.State.Running then
+                    AutoPlay:Stop()
+                end
+
+            end
+
+        end)
+
+    end
+
+    --// ESP state
+
+    if ESP then
+
+        pcall(function()
+
+            if esp then
+
+                if not ESP.State.Running then
+                    ESP:Start()
+                end
+
+            else
+
+                if ESP.State.Running then
+                    ESP:Stop()
+                end
+
+            end
+
+        end)
+
+    end
+
+    --// Health state
+
+    if HealthOverlay then
+
+        pcall(function()
+
+            if health then
+
+                if not HealthOverlay.State.Running then
+                    HealthOverlay:Start()
+                end
+
+            else
+
+                if HealthOverlay.State.Running then
+                    HealthOverlay:Stop()
+                end
+
+            end
+
+        end)
 
     end
 
 end
-
-
---// =========================================================
---// TOGGLE
---// =========================================================
-
-function UI:Toggle()
-
-    self.State.Visible =
-        not self.State.Visible
-
-
-    if self.MainFrame then
-
-        self.MainFrame.Visible =
-            self.State.Visible
-
-    end
-
-end
-
 
 --// =========================================================
 --// START
@@ -643,37 +312,44 @@ end
 function UI:Start()
 
     if self.State.Running then
+        print("[UI] Already running.")
         return
     end
 
+    print("[UI] Starting...")
 
-    self.State.Running = true
+    local success, result = pcall(function()
 
+        return self:CreateInterface()
 
-    print("[UI] Creating interface...")
+    end)
 
+    if not success then
 
-    local created =
-        self:CreateInterface()
-
-
-    if not created then
+        warn(
+            "[UI] UI creation error:",
+            tostring(result)
+        )
 
         self.State.Running = false
 
-        warn(
-            "[UI] Interface creation FAILED."
-        )
+        return
+
+    end
+
+    if not result then
+
+        warn("[UI] Interface creation FAILED.")
+
+        self.State.Running = false
 
         return
 
     end
 
+    self.State.Running = true
 
-    print(
-        "[UI] Interface creation SUCCESS."
-    )
-
+    print("[UI] Interface creation SUCCESS.")
 
     task.spawn(function()
 
@@ -682,7 +358,6 @@ function UI:Start()
             pcall(function()
 
                 self:Update()
-                self:CheckKeyboard()
 
             end)
 
@@ -694,11 +369,9 @@ function UI:Start()
 
     end)
 
-
     print("[UI] Started.")
 
 end
-
 
 --// =========================================================
 --// STOP
@@ -710,34 +383,19 @@ function UI:Stop()
         return
     end
 
-
     self.State.Running = false
 
+    pcall(function()
 
-    if self.ScreenGui then
+        UI.RemoveTab(
+            "Gakuran"
+        )
 
-        pcall(function()
-
-            self.ScreenGui:Destroy()
-
-        end)
-
-    end
-
-
-    self.ScreenGui = nil
-    self.MainFrame = nil
-    self.StatusLabel = nil
-    self.TargetLabel = nil
-    self.AutoPlayButton = nil
-    self.ESPButton = nil
-    self.HealthButton = nil
-
+    end)
 
     print("[UI] Stopped.")
 
 end
-
 
 --// =========================================================
 --// FINAL MODULE RESULT
@@ -746,4 +404,3 @@ end
 _G.__GakuranModuleResult = UI
 
 return UI
-
