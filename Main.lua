@@ -691,6 +691,8 @@ SafeStart(
 )
 
 --// UI START
+print("[Main] >>> UI START BLOCK REACHED <<<")
+
 SafeStart(
     "UI",
     UI
