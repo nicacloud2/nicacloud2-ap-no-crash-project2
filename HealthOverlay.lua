@@ -1,452 +1,489 @@
---// HealthOverlay.lua
---// Gakuran Health Overlay Module
+--// =========================================================
+--// GAKURAN - HEALTH OVERLAY
+--// GitHub / Matcha Version
+--// =========================================================
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
-local LocalPlayer = Players.LocalPlayer
-local Camera = workspace.CurrentCamera
-
-local Config = require(script.Parent.Config)
-local TargetManager = require(script.Parent.TargetManager)
-
 local HealthOverlay = {}
 
---------------------------------------------------
+--// Dependencies
+local Config = nil
+local TargetManager = nil
+
 --// State
---------------------------------------------------
+HealthOverlay.State = {
+    Running = false,
+    Enabled = true
+}
 
-HealthOverlay.State = nil
-HealthOverlay.Running = false
-HealthOverlay.Entries = {}
+HealthOverlay.Objects = {}
+HealthOverlay.Connections = {}
 
---------------------------------------------------
---// Initialize
---------------------------------------------------
 
-function HealthOverlay:Initialize(State)
-    self.State = State
+--// =========================================================
+--// DEPENDENCIES
+--// =========================================================
+
+function HealthOverlay:SetDependencies(config, targetManager)
+    Config = config
+    TargetManager = targetManager
 end
 
---------------------------------------------------
---// Get Root
---------------------------------------------------
 
-function HealthOverlay:GetRoot(character)
-    if not character then
-        return nil
-    end
+--// =========================================================
+--// INITIALIZE
+--// =========================================================
 
-    return character:FindFirstChild("HumanoidRootPart")
+function HealthOverlay:Initialize(state)
+    self.SharedState = state
+
+    print("[HealthOverlay] Initialized.")
 end
 
---------------------------------------------------
---// Get Humanoid
---------------------------------------------------
 
-function HealthOverlay:GetHumanoid(character)
+--// =========================================================
+--// CREATE GUI
+--// =========================================================
+
+function HealthOverlay:Create(player)
+    if not player then
+        return
+    end
+
+    if player == Players.LocalPlayer then
+        return
+    end
+
+    local character = player.Character
+
     if not character then
-        return nil
+        return
     end
 
-    return character:FindFirstChildOfClass("Humanoid")
-end
+    local head = character:FindFirstChild("Head")
 
---------------------------------------------------
---// Create Health Billboard
---------------------------------------------------
-
-function HealthOverlay:Create(character)
-    if not character then
-        return nil
+    if not head then
+        return
     end
 
-    local root = self:GetRoot(character)
-
-    if not root then
-        return nil
-    end
-
-    local existing = root:FindFirstChild(
-        "GakuranHealthOverlay"
-    )
-
-    if existing then
-        return existing
-    end
-
-    --------------------------------------------------
-    -- Billboard
-    --------------------------------------------------
+    self:Remove(player)
 
     local billboard = Instance.new("BillboardGui")
 
-    billboard.Name =
-        "GakuranHealthOverlay"
-
-    billboard.Adornee = root
-
-    billboard.Size = UDim2.new(
-        0,
-        12,
-        0,
-        100
-    )
-
-    billboard.StudsOffset =
-        Vector3.new(-3, 0, 0)
-
+    billboard.Name = "GakuranHealth"
+    billboard.Adornee = head
+    billboard.Size = UDim2.new(0, 120, 0, 35)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
     billboard.AlwaysOnTop = true
+    billboard.ResetOnSpawn = false
 
-    billboard.Enabled =
-        Config.ESP.Enabled
-        and Config.ESP.ShowHealth
+    billboard.Parent = head
 
-    billboard.Parent = root
 
-    --------------------------------------------------
-    -- Background
-    --------------------------------------------------
+    --// Background
 
     local background = Instance.new("Frame")
 
     background.Name = "Background"
-
-    background.Size =
-        UDim2.fromScale(1, 1)
-
-    background.BackgroundTransparency = 0.3
-
+    background.Size = UDim2.new(1, 0, 0, 8)
+    background.Position = UDim2.new(0, 0, 0, 0)
     background.BorderSizePixel = 0
 
     background.Parent = billboard
 
-    --------------------------------------------------
-    -- Health Bar
-    --------------------------------------------------
 
-    local bar = Instance.new("Frame")
+    --// Health bar
 
-    bar.Name = "Health"
+    local healthBar = Instance.new("Frame")
 
-    bar.AnchorPoint =
-        Vector2.new(0, 1)
+    healthBar.Name = "HealthBar"
+    healthBar.Size = UDim2.new(1, 0, 1, 0)
+    healthBar.Position = UDim2.new(0, 0, 0, 0)
+    healthBar.BorderSizePixel = 0
 
-    bar.Position =
-        UDim2.fromScale(0, 1)
+    healthBar.Parent = background
 
-    bar.Size =
-        UDim2.fromScale(1, 1)
 
-    bar.BorderSizePixel = 0
-
-    bar.Parent = background
-
-    --------------------------------------------------
-    -- HP Text
-    --------------------------------------------------
+    --// Health text
 
     local text = Instance.new("TextLabel")
 
-    text.Name = "Text"
-
-    text.AnchorPoint =
-        Vector2.new(0.5, 0.5)
-
-    text.Position =
-        UDim2.fromScale(0.5, 0.5)
-
-    text.Size =
-        UDim2.new(0, 80, 0, 20)
+    text.Name = "HealthText"
+    text.Size = UDim2.new(1, 0, 0, 20)
+    text.Position = UDim2.new(0, 0, 0, 10)
 
     text.BackgroundTransparency = 1
 
-    text.TextScaled = false
+    text.Text = "100 / 100"
     text.TextSize = 12
-
-    text.Font =
-        Enum.Font.GothamBold
+    text.Font = Enum.Font.GothamBold
+    text.TextStrokeTransparency = 0.5
 
     text.Parent = billboard
 
-    return billboard
+
+    self.Objects[player] = {
+        Billboard = billboard,
+        Background = background,
+        HealthBar = healthBar,
+        Text = text
+    }
 end
 
---------------------------------------------------
---// Update Health
---------------------------------------------------
 
-function HealthOverlay:Update(character)
+--// =========================================================
+--// REMOVE
+--// =========================================================
+
+function HealthOverlay:Remove(player)
+
+    local object = self.Objects[player]
+
+    if not object then
+        return
+    end
+
+    if object.Billboard then
+
+        pcall(function()
+            object.Billboard:Destroy()
+        end)
+
+    end
+
+    self.Objects[player] = nil
+end
+
+
+--// =========================================================
+--// UPDATE PLAYER
+--// =========================================================
+
+function HealthOverlay:UpdatePlayer(player)
+
+    local object = self.Objects[player]
+
+    if not object then
+        return
+    end
+
+    local character = player.Character
+
     if not character then
+        self:Remove(player)
         return
     end
 
     local humanoid =
-        self:GetHumanoid(character)
+        character:FindFirstChildOfClass("Humanoid")
 
     if not humanoid then
+        self:Remove(player)
         return
     end
 
-    local billboard =
-        self:Create(character)
 
-    if not billboard then
-        return
-    end
-
-    local background =
-        billboard:FindFirstChild(
-            "Background"
-        )
-
-    if not background then
-        return
-    end
-
-    local bar =
-        background:FindFirstChild(
-            "Health"
-        )
-
-    local text =
-        billboard:FindFirstChild(
-            "Text"
-        )
-
-    if not bar then
-        return
-    end
-
-    --------------------------------------------------
-    -- Health Percentage
-    --------------------------------------------------
-
-    local maxHealth =
-        humanoid.MaxHealth
+    local maxHealth = humanoid.MaxHealth
+    local health = humanoid.Health
 
     if maxHealth <= 0 then
-        maxHealth = 1
+        maxHealth = 100
     end
 
-    local health =
+
+    local percentage =
         math.clamp(
-            humanoid.Health / maxHealth,
+            health / maxHealth,
             0,
             1
         )
 
-    --------------------------------------------------
-    -- Update Bar
-    --------------------------------------------------
 
-    bar.Size =
-        UDim2.fromScale(
+    object.HealthBar.Size =
+        UDim2.new(
+            percentage,
+            0,
             1,
-            health
+            0
         )
 
-    --------------------------------------------------
-    -- Update Text
-    --------------------------------------------------
 
-    if text then
-        text.Text = string.format(
+    object.Text.Text =
+        string.format(
             "%.0f / %.0f",
-            humanoid.Health,
-            humanoid.MaxHealth
+            health,
+            maxHealth
         )
+
+
+    if health <= 0 then
+        self:Remove(player)
     end
-
-    --------------------------------------------------
-    -- Visibility
-    --------------------------------------------------
-
-    billboard.Enabled =
-        Config.ESP.Enabled
-        and Config.ESP.ShowHealth
 end
 
---------------------------------------------------
---// Setup Character
---------------------------------------------------
 
-function HealthOverlay:Setup(character)
-    if not character then
-        return
-    end
-
-    if character == LocalPlayer.Character then
-        return
-    end
-
-    if not TargetManager:IsValidCharacter(
-        character
-    ) then
-        return
-    end
-
-    self.Entries[character] = true
-
-    self:Create(character)
-end
-
---------------------------------------------------
---// Remove Character
---------------------------------------------------
-
-function HealthOverlay:Remove(character)
-    if not character then
-        return
-    end
-
-    local root =
-        self:GetRoot(character)
-
-    if root then
-        local billboard =
-            root:FindFirstChild(
-                "GakuranHealthOverlay"
-            )
-
-        if billboard then
-            billboard:Destroy()
-        end
-    end
-
-    self.Entries[character] = nil
-end
-
---------------------------------------------------
---// Refresh
---------------------------------------------------
+--// =========================================================
+--// REFRESH
+--// =========================================================
 
 function HealthOverlay:Refresh()
-    if not Config.ESP.Enabled
-        or not Config.ESP.ShowHealth
-    then
 
-        self:HideAll()
-
+    if not self.State.Enabled then
         return
     end
 
-    local targets =
-        TargetManager:GetTargets()
 
-    local active = {}
+    for _, player in ipairs(Players:GetPlayers()) do
 
-    for _, character in ipairs(targets) do
+        if player ~= Players.LocalPlayer then
 
-        if TargetManager:IsValidCharacter(
-            character
-        ) then
+            local character = player.Character
 
-            active[character] = true
+            if character then
 
-            self:Setup(character)
-            self:Update(character)
-        end
-    end
+                local humanoid =
+                    character:FindFirstChildOfClass("Humanoid")
 
-    --------------------------------------------------
-    -- Remove old entries
-    --------------------------------------------------
+                local head =
+                    character:FindFirstChild("Head")
 
-    for character in pairs(self.Entries) do
 
-        if not active[character] then
-            self:Remove(character)
-        end
+                if humanoid
+                    and head
+                    and humanoid.Health > 0 then
 
-    end
-end
+                    if not self.Objects[player] then
+                        self:Create(player)
+                    end
 
---------------------------------------------------
---// Hide All
---------------------------------------------------
+                    self:UpdatePlayer(player)
 
-function HealthOverlay:HideAll()
-    for character in pairs(self.Entries) do
+                else
 
-        local root =
-            self:GetRoot(character)
+                    self:Remove(player)
 
-        if root then
+                end
 
-            local billboard =
-                root:FindFirstChild(
-                    "GakuranHealthOverlay"
-                )
+            else
 
-            if billboard then
-                billboard.Enabled = false
+                self:Remove(player)
+
             end
+
         end
+
+    end
+
+
+    -- Remove players that left
+
+    for player in pairs(self.Objects) do
+
+        if not player.Parent then
+            self:Remove(player)
+        end
+
     end
 end
 
---------------------------------------------------
---// Show All
---------------------------------------------------
 
-function HealthOverlay:ShowAll()
-    for character in pairs(self.Entries) do
+--// =========================================================
+--// PLAYER EVENTS
+--// =========================================================
 
-        local root =
-            self:GetRoot(character)
+function HealthOverlay:SetupPlayerEvents()
 
-        if root then
+    local playerAdded =
+        Players.PlayerAdded:Connect(function(player)
 
-            local billboard =
-                root:FindFirstChild(
-                    "GakuranHealthOverlay"
-                )
+            local connection =
+                player.CharacterAdded:Connect(function()
 
-            if billboard then
-                billboard.Enabled =
-                    Config.ESP.Enabled
-                    and Config.ESP.ShowHealth
-            end
+                    task.wait(0.5)
+
+                    if self.State.Running then
+                        self:Create(player)
+                    end
+
+                end)
+
+            table.insert(
+                self.Connections,
+                connection
+            )
+
+        end)
+
+
+    table.insert(
+        self.Connections,
+        playerAdded
+    )
+
+
+    local playerRemoving =
+        Players.PlayerRemoving:Connect(function(player)
+
+            self:Remove(player)
+
+        end)
+
+
+    table.insert(
+        self.Connections,
+        playerRemoving
+    )
+
+
+    for _, player in ipairs(Players:GetPlayers()) do
+
+        if player ~= Players.LocalPlayer then
+
+            local connection =
+                player.CharacterAdded:Connect(function()
+
+                    task.wait(0.5)
+
+                    if self.State.Running then
+                        self:Create(player)
+                    end
+
+                end)
+
+
+            table.insert(
+                self.Connections,
+                connection
+            )
+
         end
+
     end
 end
 
---------------------------------------------------
---// Start
---------------------------------------------------
+
+--// =========================================================
+--// ENABLE
+--// =========================================================
+
+function HealthOverlay:SetEnabled(enabled)
+
+    self.State.Enabled = enabled == true
+
+
+    if not self.State.Enabled then
+
+        for player in pairs(self.Objects) do
+            self:Remove(player)
+        end
+
+    end
+end
+
+
+function HealthOverlay:IsEnabled()
+    return self.State.Enabled
+end
+
+
+--// =========================================================
+--// START
+--// =========================================================
 
 function HealthOverlay:Start()
-    if self.Running then
+
+    if self.State.Running then
         return
     end
 
-    self.Running = true
 
-    task.spawn(function()
+    self.State.Running = true
 
-        while self.Running do
+
+    self:SetupPlayerEvents()
+    self:Refresh()
+
+
+    local connection =
+        RunService.Heartbeat:Connect(function()
+
+            if not self.State.Running then
+                return
+            end
+
+            if not self.State.Enabled then
+                return
+            end
 
             self:Refresh()
 
-            task.wait(0.1)
-        end
+        end)
 
-    end)
+
+    table.insert(
+        self.Connections,
+        connection
+    )
+
+
+    print("[HealthOverlay] Started.")
 end
 
---------------------------------------------------
---// Stop
---------------------------------------------------
+
+--// =========================================================
+--// STOP
+--// =========================================================
 
 function HealthOverlay:Stop()
-    self.Running = false
 
-    for character in pairs(self.Entries) do
-        self:Remove(character)
+    if not self.State.Running then
+        return
     end
 
-    self.Entries = {}
+
+    self.State.Running = false
+
+
+    for _, connection in ipairs(self.Connections) do
+
+        if connection then
+
+            pcall(function()
+                connection:Disconnect()
+            end)
+
+        end
+
+    end
+
+
+    table.clear(self.Connections)
+
+
+    for player in pairs(self.Objects) do
+        self:Remove(player)
+    end
+
+
+    print("[HealthOverlay] Stopped.")
 end
+
+
+--// =========================================================
+--// DESTROY
+--// =========================================================
+
+function HealthOverlay:Destroy()
+
+    self:Stop()
+
+end
+
+
+--// =========================================================
+--// RETURN
+--// =========================================================
 
 return HealthOverlay
