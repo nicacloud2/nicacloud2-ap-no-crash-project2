@@ -102,62 +102,45 @@ function ESP:Refresh()
     local currentPlayers = {}
 
     for _, player in ipairs(Players:GetPlayers()) do
-
         currentPlayers[player] = true
 
         if player ~= Players.LocalPlayer then
-
             local character = player.Character
 
             if character then
-
                 local humanoid =
                     character:FindFirstChildOfClass("Humanoid")
 
                 if humanoid and humanoid.Health > 0 then
-
                     if not self.Objects[player] then
-
                         self:CreateHighlight(player)
-
                     else
-
                         local highlight = self.Objects[player]
 
-                        if highlight.Adornee ~= character then
+                        if not highlight
+                            or not highlight.Parent
+                            or highlight.Adornee ~= character
+                        then
                             self:CreateHighlight(player)
                         end
-
                     end
-
                 else
-
                     self:RemoveHighlight(player)
-
                 end
-
             else
-
                 self:RemoveHighlight(player)
-
             end
-
         end
-
     end
 
     --// Remove players that no longer exist
 
     for player in pairs(self.Objects) do
-
         if not currentPlayers[player]
             or not player.Parent
         then
-
             self:RemoveHighlight(player)
-
         end
-
     end
 end
 
@@ -166,7 +149,6 @@ end
 --// =========================================================
 
 function ESP:UpdateTarget()
-
     if not TargetManager then
         return
     end
@@ -178,23 +160,15 @@ function ESP:UpdateTarget()
     end)
 
     for player, highlight in pairs(self.Objects) do
-
         if highlight and highlight.Parent then
-
             if player == target then
-
                 highlight.FillTransparency = 0.55
                 highlight.OutlineTransparency = 0
-
             else
-
                 highlight.FillTransparency = 0.75
                 highlight.OutlineTransparency = 0
-
             end
-
         end
-
     end
 end
 
@@ -203,7 +177,6 @@ end
 --// =========================================================
 
 function ESP:Poll()
-
     if not self.State.Running then
         return
     end
@@ -226,15 +199,12 @@ end
 --// =========================================================
 
 function ESP:SetEnabled(enabled)
-
     self.State.Enabled = enabled == true
 
     if not self.State.Enabled then
-
         for player in pairs(self.Objects) do
             self:RemoveHighlight(player)
         end
-
     end
 end
 
@@ -247,7 +217,6 @@ end
 --// =========================================================
 
 function ESP:Start()
-
     if self.State.Running then
         return
     end
@@ -258,17 +227,13 @@ function ESP:Start()
     self:UpdateTarget()
 
     task.spawn(function()
-
         while self.State.Running do
-
             pcall(function()
                 self:Poll()
             end)
 
             task.wait(self.PollInterval)
-
         end
-
     end)
 
     print("[ESP] Started.")
@@ -279,7 +244,6 @@ end
 --// =========================================================
 
 function ESP:Stop()
-
     if not self.State.Running then
         return
     end
@@ -303,6 +267,7 @@ end
 
 --// =========================================================
 --// MATCHA MODULE RESULT
---// =========================================================
+--// IMPORTANT: DO NOT CHANGE THIS TO "return ESP"
+// =========================================================
 
 _G.__GakuranModuleResult = ESP
