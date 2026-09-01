@@ -1,193 +1,421 @@
 --// AnimationTracker.lua
---// Gakuran Script - Animation Tracking
+--// Gakuran Animation Tracking Module
 
 local Players = game:GetService("Players")
 
+local LocalPlayer = Players.LocalPlayer
+
+local Config = require(script.Parent.Config)
+local AnimationDatabase = require(script.Parent.AnimationDatabase)
+
 local AnimationTracker = {}
 
+--------------------------------------------------
+--// State
+--------------------------------------------------
+
 AnimationTracker.State = nil
-AnimationTracker.Config = nil
-AnimationTracker.Connections = {}
-AnimationTracker.Tracks = {}
+AnimationTracker.Trackers = {}
+AnimationTracker.LocalTracker = nil
 
---==================================================
--- Initialization
---==================================================
+--------------------------------------------------
+--// Initialize
+--------------------------------------------------
 
-function AnimationTracker:Initialize(State, Config)
+function AnimationTracker:Initialize(State)
     self.State = State
-    self.Config = Config
-
-    table.clear(self.Connections)
-    table.clear(self.Tracks)
-
-    self:ConnectPlayers()
 end
 
---==================================================
--- Track Character
---==================================================
+--------------------------------------------------
+--// Animation ID Helper
+--------------------------------------------------
+
+function AnimationTracker:GetAnimationId(animation)
+    if not animation then
+        return nil
+    end
+
+    -- Animation object
+    if animation.AnimationId then
+        return animation.AnimationId
+    end
+
+    -- AnimationTrack
+    if animation.Animation and animation.Animation.AnimationId then
+        return animation.Animation.AnimationId
+    end
+
+    return nil
+end
+
+--------------------------------------------------
+--// Check Ignore List
+--------------------------------------------------
+
+function AnimationTracker:IsIgnored(animationId)
+    if not animationId then
+        return false
+    end
+
+    local numericId = tonumber(
+        tostring(animationId):match("%d+")
+    )
+
+    if not numericId then
+        return false
+    end
+
+    for _, ignoredId in ipairs(Config.IgnoreIds) do
+        if numericId == ignoredId then
+            return true
+        end
+    end
+
+    return false
+end
+
+--------------------------------------------------
+--// Get Animation Data
+--------------------------------------------------
+
+function AnimationTracker:GetData(animationId)
+    if not animationId then
+        return nil
+    end
+
+    return AnimationDatabase:Get(animationId)
+end
+
+--------------------------------------------------
+--// Check Known Animation
+--------------------------------------------------
+
+function AnimationTracker:IsKnown(animationId)
+    return AnimationDatabase:Exists(animationId)
+end
+
+--------------------------------------------------
+--// Get Display Name
+--------------------------------------------------
+
+function AnimationTracker:GetDisplayName(animationId)
+    local data = self:GetData(animationId)
+
+    if data then
+        return data.DisplayName
+    end
+
+    return tostring(animationId)
+end
+
+--------------------------------------------------
+--// Get Reaction Time
+--------------------------------------------------
+
+function AnimationTracker:GetReactionTime(animationId)
+    return AnimationDatabase:GetReactionTime(animationId)
+end
+
+--------------------------------------------------
+--// Get Animator
+--------------------------------------------------
+
+function AnimationTracker:GetAnimator(character)
+    if not character then
+        return nil
+    end
+
+    return character:FindFirstChildOfClass("Animator")
+        or character:FindFirstChildWhichIsA("Animator", true)
+end
+
+--------------------------------------------------
+--// Get Playing Animations
+--------------------------------------------------
+
+function AnimationTracker:GetPlayingAnimations(character)
+    local animator = self:GetAnimator(character)
+
+    if not animator then
+        return {}
+    end
+
+    return animator:GetPlayingAnimationTracks()
+end
+
+--------------------------------------------------
+--// Process Animation
+--------------------------------------------------
+
+function AnimationTracker:ProcessAnimation(
+    character,
+    animationTrack
+)
+    if not character or not animationTrack then
+        return nil
+    end
+
+    local animationId = self:GetAnimationId(animationTrack)
+
+    if not animationId then
+        return nil
+    end
+
+    if self:IsIgnored(animationId) then
+        return nil
+    end
+
+    local data = self:GetData(animationId)
+
+    return {
+        Character = character,
+        Player = Players:GetPlayerFromCharacter(character),
+
+        AnimationTrack = animationTrack,
+        AnimationId = animationId,
+
+        DisplayName = data and data.DisplayName
+            or tostring(animationId),
+
+        Style = data and data.Style,
+
+        ReactionTime = self:GetReactionTime(animationId),
+
+        Known = data ~= nil,
+
+        RegistryData = {},
+    }
+end
+
+--------------------------------------------------
+--// Track Character
+--------------------------------------------------
 
 function AnimationTracker:TrackCharacter(character)
+    if not character then
+        return nil
+    end
+
+    local animator = self:GetAnimator(character)
+
+    if not animator then
+        return nil
+    end
+
+    --------------------------------------------------
+    -- Prevent duplicate trackers
+    --------------------------------------------------
+
+    if self.Trackers[character] then
+        return self.Trackers[character]
+    end
+
+    local tracker = {
+        Character = character,
+        Animator = animator,
+        Connections = {},
+        Active = true,
+    }
+
+    self.Trackers[character] = tracker
+
+    --------------------------------------------------
+    -- Animation Played
+    --------------------------------------------------
+
+    tracker.Connections.AnimationPlayed =
+        animator.AnimationPlayed:Connect(function(animationTrack)
+
+            if not tracker.Active then
+                return
+            end
+
+            local data = self:ProcessAnimation(
+                character,
+                animationTrack
+            )
+
+            if not data then
+                return
+            end
+
+            --------------------------------------------------
+            -- Callback for Main / ParryController
+            --------------------------------------------------
+
+            if self.OnAnimation then
+                self.OnAnimation(data)
+            end
+        end)
+
+    return tracker
+end
+
+--------------------------------------------------
+--// Stop Tracking Character
+--------------------------------------------------
+
+function AnimationTracker:UntrackCharacter(character)
+    local tracker = self.Trackers[character]
+
+    if not tracker then
+        return
+    end
+
+    tracker.Active = false
+
+    for _, connection in pairs(tracker.Connections) do
+        if connection then
+            connection:Disconnect()
+        end
+    end
+
+    tracker.Connections = {}
+
+    self.Trackers[character] = nil
+end
+
+--------------------------------------------------
+--// Track Local Player
+--------------------------------------------------
+
+function AnimationTracker:TrackLocalPlayer()
+    local character = LocalPlayer.Character
+
+    if not character then
+        return nil
+    end
+
+    self.LocalTracker = self:TrackCharacter(character)
+
+    return self.LocalTracker
+end
+
+--------------------------------------------------
+--// Refresh Local Player
+--------------------------------------------------
+
+function AnimationTracker:RefreshLocalPlayer()
+    if self.LocalTracker then
+        self:UntrackCharacter(LocalPlayer.Character)
+    end
+
+    return self:TrackLocalPlayer()
+end
+
+--------------------------------------------------
+--// Track Existing Characters
+--------------------------------------------------
+
+function AnimationTracker:TrackCharacters(characters)
+    if not characters then
+        return
+    end
+
+    for _, character in ipairs(characters) do
+        if character ~= LocalPlayer.Character then
+            self:TrackCharacter(character)
+        end
+    end
+end
+
+--------------------------------------------------
+--// Untrack Everything
+--------------------------------------------------
+
+function AnimationTracker:StopAll()
+    for character in pairs(self.Trackers) do
+        self:UntrackCharacter(character)
+    end
+
+    self.LocalTracker = nil
+end
+
+--------------------------------------------------
+--// Character Added
+--------------------------------------------------
+
+function AnimationTracker:WatchCharacter(character)
     if not character then
         return
     end
 
-    local humanoid = character:FindFirstChildOfClass("Humanoid")
-    if not humanoid then
-        humanoid = character:WaitForChild("Humanoid", 5)
-    end
+    task.spawn(function()
+        local animator = character:FindFirstChildOfClass("Animator")
 
-    if not humanoid then
-        return
-    end
+        if not animator then
+            animator = character:WaitForChild(
+                "Humanoid",
+                5
+            )
 
-    local animator = humanoid:FindFirstChildOfClass("Animator")
-    if not animator then
-        animator = humanoid:WaitForChild("Animator", 5)
-    end
-
-    if not animator then
-        return
-    end
-
-    -- Avoid tracking the same animator twice
-    if self.Tracks[animator] then
-        return
-    end
-
-    self.Tracks[animator] = {}
-
-    local connection = animator.AnimationPlayed:Connect(function(track)
-        self:OnAnimationPlayed(character, track)
-    end)
-
-    table.insert(self.Connections, connection)
-end
-
---==================================================
--- Animation Played
---==================================================
-
-function AnimationTracker:OnAnimationPlayed(character, track)
-    if not self.State or not self.State.Alive then
-        return
-    end
-
-    if not track or not track.Animation then
-        return
-    end
-
-    local animationId = track.Animation.AnimationId
-
-    if not animationId then
-        return
-    end
-
-    animationId = tostring(animationId)
-
-    -- Remove the Roblox asset prefix
-    animationId = animationId:gsub("rbxassetid://", "")
-
-    -- Store animation
-    self.State.AnimationRegistry[animationId] = {
-        Character = character,
-        Track = track,
-        Time = os.clock(),
-    }
-
-    -- Optional logging
-    if self.Config.AnimationTracker
-        and self.Config.AnimationTracker.LogAnimations then
-
-        print(
-            "[AnimationTracker]",
-            character.Name,
-            animationId
-        )
-    end
-end
-
---==================================================
--- Connect Players
---==================================================
-
-function AnimationTracker:ConnectPlayers()
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player.Character then
-            self:TrackCharacter(player.Character)
+            if animator then
+                animator = animator:FindFirstChildOfClass("Animator")
+            end
         end
 
-        local connection = player.CharacterAdded:Connect(function(character)
+        if animator then
             self:TrackCharacter(character)
-        end)
-
-        table.insert(self.Connections, connection)
-    end
-
-    local playerConnection = Players.PlayerAdded:Connect(function(player)
-        local connection = player.CharacterAdded:Connect(function(character)
-            self:TrackCharacter(character)
-        end)
-
-        table.insert(self.Connections, connection)
-
-        if player.Character then
-            self:TrackCharacter(player.Character)
         end
     end)
-
-    table.insert(self.Connections, playerConnection)
 end
 
---==================================================
--- Get Last Animation
---==================================================
+--------------------------------------------------
+--// Animation Lookup Helpers
+--------------------------------------------------
 
-function AnimationTracker:Get(animationId)
-    if not self.State then
-        return nil
-    end
-
-    return self.State.AnimationRegistry[tostring(animationId)]
-end
-
---==================================================
--- Clear Character
---==================================================
-
-function AnimationTracker:ClearCharacter(character)
-    if not self.State then
-        return
-    end
-
-    for animationId, data in pairs(self.State.AnimationRegistry) do
-        if data.Character == character then
-            self.State.AnimationRegistry[animationId] = nil
+function AnimationTracker:IsParriedAnimation(animationId)
+    for _, id in ipairs(Config.Animations.ParriedAnimation or {}) do
+        if id == animationId then
+            return true
         end
     end
+
+    return false
 end
 
---==================================================
--- Cleanup
---==================================================
-
-function AnimationTracker:Destroy()
-    for _, connection in ipairs(self.Connections) do
-        pcall(function()
-            connection:Disconnect()
-        end)
+function AnimationTracker:IsStunnedAnimation(animationId)
+    for _, id in ipairs(Config.Animations.StunnedAnimation or {}) do
+        if id == animationId then
+            return true
+        end
     end
 
-    table.clear(self.Connections)
-    table.clear(self.Tracks)
+    return false
+end
 
-    if self.State then
-        table.clear(self.State.AnimationRegistry)
+function AnimationTracker:IsParryingAnimation(animationId)
+    for _, id in ipairs(Config.Animations.ParryingAnimation or {}) do
+        if id == animationId then
+            return true
+        end
     end
 
-    self.State = nil
-    self.Config = nil
+    return false
+end
+
+function AnimationTracker:IsParryFailedAnimation(animationId)
+    for _, id in ipairs(Config.Animations.ParryFailed or {}) do
+        if id == animationId then
+            return true
+        end
+    end
+
+    return false
+end
+
+--------------------------------------------------
+--// Initialize Local Character
+--------------------------------------------------
+
+if Config.AnimationTracker.Enabled then
+
+    LocalPlayer.CharacterAdded:Connect(function()
+        task.wait(1)
+
+        AnimationTracker:TrackLocalPlayer()
+    end)
+
 end
 
 return AnimationTracker
