@@ -1,4 +1,11 @@
+--// =========================================================
+--// GAKURAN - ESP
+--// GitHub / Matcha Version
+--// MATCHA DRAWING VERSION
+--// =========================================================
+
 local Players = game:GetService("Players")
+local Camera = workspace.CurrentCamera
 
 local ESP = {}
 
@@ -11,19 +18,39 @@ ESP.State = {
 }
 
 ESP.Objects = {}
-ESP.PollInterval = 0.15
+ESP.PollInterval = 0.03
+
+--// =========================================================
+--// DEPENDENCIES
+--// =========================================================
 
 function ESP:SetDependencies(config, targetManager)
     Config = config
     TargetManager = targetManager
+
+    print("[ESP] Dependencies received.")
 end
 
 function ESP:Initialize(state)
     self.SharedState = state
+
     print("[ESP] Initialized.")
 end
 
-function ESP:CreateHighlight(player)
+--// =========================================================
+--// DRAWING CHECK
+--// =========================================================
+
+function ESP:IsDrawingAvailable()
+    return type(Drawing) == "table"
+        and type(Drawing.new) == "function"
+end
+
+--// =========================================================
+--// CREATE ESP
+--// =========================================================
+
+function ESP:CreateESP(player)
     if not player then
         return
     end
@@ -32,40 +59,166 @@ function ESP:CreateHighlight(player)
         return
     end
 
-    local character = player.Character
-
-    if not character then
+    if self.Objects[player] then
         return
     end
 
-    self:RemoveHighlight(player)
+    if not self:IsDrawingAvailable() then
+        return
+    end
 
-    local highlight = Instance.new("Highlight")
+    local success, result = pcall(function()
 
-    highlight.Name = "GakuranESP"
-    highlight.Adornee = character
-    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    highlight.FillTransparency = 0.75
-    highlight.OutlineTransparency = 0
+        local box = Drawing.new("Square")
+        box.Visible = false
+        box.Filled = false
+        box.Thickness = 1
+        box.Transparency = 1
 
-    highlight.Parent = character
+        local name = Drawing.new("Text")
+        name.Visible = false
+        name.Center = true
+        name.Outline = true
+        name.Size = 13
+        name.Transparency = 1
 
-    self.Objects[player] = highlight
+        self.Objects[player] = {
+            Box = box,
+            Name = name
+        }
+
+    end)
+
+    if not success then
+        warn("[ESP] Failed to create drawing:", tostring(result))
+        return
+    end
 end
 
-function ESP:RemoveHighlight(player)
-    local highlight = self.Objects[player]
+--// =========================================================
+--// REMOVE ESP
+--// =========================================================
 
-    if not highlight then
+function ESP:RemoveESP(player)
+    local object = self.Objects[player]
+
+    if not object then
         return
     end
 
     pcall(function()
-        highlight:Destroy()
+        if object.Box then
+            object.Box.Visible = false
+            object.Box:Remove()
+        end
+    end)
+
+    pcall(function()
+        if object.Name then
+            object.Name.Visible = false
+            object.Name:Remove()
+        end
     end)
 
     self.Objects[player] = nil
 end
+
+--// =========================================================
+--// UPDATE PLAYER
+--// =========================================================
+
+function ESP:UpdatePlayer(player)
+    if not player then
+        return
+    end
+
+    if player == Players.LocalPlayer then
+        return
+    end
+
+    local object = self.Objects[player]
+
+    if not object then
+        self:CreateESP(player)
+        object = self.Objects[player]
+    end
+
+    if not object then
+        return
+    end
+
+    local character = player.Character
+
+    if not character then
+        object.Box.Visible = false
+        object.Name.Visible = false
+        return
+    end
+
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+
+    if not humanoid or humanoid.Health <= 0 then
+        object.Box.Visible = false
+        object.Name.Visible = false
+        return
+    end
+
+    local root =
+        character:FindFirstChild("HumanoidRootPart")
+        or character:FindFirstChild("UpperTorso")
+        or character:FindFirstChild("Torso")
+
+    if not root then
+        object.Box.Visible = false
+        object.Name.Visible = false
+        return
+    end
+
+    local success, screenPosition, visible = pcall(function()
+        return Camera:WorldToViewportPoint(root.Position)
+    end)
+
+    if not success or not screenPosition then
+        object.Box.Visible = false
+        object.Name.Visible = false
+        return
+    end
+
+    if not visible or screenPosition.Z <= 0 then
+        object.Box.Visible = false
+        object.Name.Visible = false
+        return
+    end
+
+    --// Distance based box size
+    local distance = screenPosition.Z
+
+    local height = math.clamp(
+        4000 / math.max(distance, 1),
+        20,
+        300
+    )
+
+    local width = height * 0.55
+
+    local x = screenPosition.X - (width / 2)
+    local y = screenPosition.Y - (height / 2)
+
+    object.Box.Position = Vector2.new(x, y)
+    object.Box.Size = Vector2.new(width, height)
+
+    object.Name.Position =
+        Vector2.new(screenPosition.X, y - 16)
+
+    object.Name.Text = player.Name
+
+    object.Box.Visible = true
+    object.Name.Visible = true
+end
+
+--// =========================================================
+--// REFRESH
+--// =========================================================
 
 function ESP:Refresh()
     if not self.State.Enabled then
@@ -75,39 +228,24 @@ function ESP:Refresh()
     local currentPlayers = {}
 
     for _, player in ipairs(Players:GetPlayers()) do
+
         currentPlayers[player] = true
 
         if player ~= Players.LocalPlayer then
-            local character = player.Character
-
-            if character then
-                local humanoid =
-                    character:FindFirstChildOfClass("Humanoid")
-
-                if humanoid and humanoid.Health > 0 then
-                    local highlight = self.Objects[player]
-
-                    if not highlight
-                        or not highlight.Parent
-                        or highlight.Adornee ~= character
-                    then
-                        self:CreateHighlight(player)
-                    end
-                else
-                    self:RemoveHighlight(player)
-                end
-            else
-                self:RemoveHighlight(player)
-            end
+            self:UpdatePlayer(player)
         end
     end
 
     for player in pairs(self.Objects) do
         if not currentPlayers[player] or not player.Parent then
-            self:RemoveHighlight(player)
+            self:RemoveESP(player)
         end
     end
 end
+
+--// =========================================================
+--// TARGET UPDATE
+--// =========================================================
 
 function ESP:UpdateTarget()
     if not TargetManager then
@@ -120,18 +258,29 @@ function ESP:UpdateTarget()
         target = TargetManager:GetCurrentTarget()
     end)
 
-    for player, highlight in pairs(self.Objects) do
-        if highlight and highlight.Parent then
-            if player == target then
-                highlight.FillTransparency = 0.55
-            else
-                highlight.FillTransparency = 0.75
-            end
+    for player, object in pairs(self.Objects) do
 
-            highlight.OutlineTransparency = 0
+        if object and object.Box and object.Name then
+
+            local isTarget = player == target
+
+            pcall(function()
+                if isTarget then
+                    object.Box.Thickness = 2
+                    object.Name.Size = 15
+                else
+                    object.Box.Thickness = 1
+                    object.Name.Size = 13
+                end
+            end)
+
         end
     end
 end
+
+--// =========================================================
+--// POLL
+--// =========================================================
 
 function ESP:Poll()
     if not self.State.Running then
@@ -151,13 +300,20 @@ function ESP:Poll()
     end)
 end
 
+--// =========================================================
+--// ENABLE / DISABLE
+--// =========================================================
+
 function ESP:SetEnabled(enabled)
+
     self.State.Enabled = enabled == true
 
     if not self.State.Enabled then
+
         for player in pairs(self.Objects) do
-            self:RemoveHighlight(player)
+            self:RemoveESP(player)
         end
+
     end
 end
 
@@ -165,10 +321,22 @@ function ESP:IsEnabled()
     return self.State.Enabled
 end
 
+--// =========================================================
+--// START
+--// =========================================================
+
 function ESP:Start()
+
     if self.State.Running then
         return
     end
+
+    if not self:IsDrawingAvailable() then
+        warn("[ESP] Drawing API unavailable.")
+        return
+    end
+
+    print("[ESP] Drawing API detected.")
 
     self.State.Running = true
 
@@ -176,16 +344,26 @@ function ESP:Start()
     self:UpdateTarget()
 
     task.spawn(function()
+
         while self.State.Running do
+
             self:Poll()
+
             task.wait(self.PollInterval)
+
         end
+
     end)
 
     print("[ESP] Started.")
 end
 
+--// =========================================================
+--// STOP
+--// =========================================================
+
 function ESP:Stop()
+
     if not self.State.Running then
         return
     end
@@ -193,14 +371,23 @@ function ESP:Stop()
     self.State.Running = false
 
     for player in pairs(self.Objects) do
-        self:RemoveHighlight(player)
+        self:RemoveESP(player)
     end
 
     print("[ESP] Stopped.")
 end
 
+--// =========================================================
+--// DESTROY
+--// =========================================================
+
 function ESP:Destroy()
     self:Stop()
 end
 
+--// =========================================================
+--// MODULE EXPORT
+--// =========================================================
+
 _G.__GakuranModuleResult = ESP
+return ESP
