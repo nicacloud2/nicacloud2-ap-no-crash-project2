@@ -1,4 +1,3 @@
-
 --// =========================================================
 --// GAKURAN - TARGET MANAGER
 --// GitHub / Matcha Version
@@ -9,12 +8,7 @@ local Players = game:GetService("Players")
 
 local TargetManager = {}
 
---// Dependencies
 local Config = nil
-
---// =========================================================
---// STATE
---// =========================================================
 
 TargetManager.State = {
     Running = false
@@ -23,11 +17,10 @@ TargetManager.State = {
 TargetManager.CurrentTarget = nil
 TargetManager.Targets = {}
 TargetManager.CurrentIndex = 0
-
 TargetManager.PollInterval = 0.25
 
 --// =========================================================
---// DEPENDENCIES
+--// CONFIG
 --// =========================================================
 
 function TargetManager:SetConfig(config)
@@ -35,19 +28,14 @@ function TargetManager:SetConfig(config)
 end
 
 --// =========================================================
---// GET LOCAL PLAYER
+--// PLAYER / CHARACTER HELPERS
 --// =========================================================
 
 function TargetManager:GetLocalPlayer()
     return Players.LocalPlayer
 end
 
---// =========================================================
---// GET CHARACTER
---// =========================================================
-
 function TargetManager:GetCharacter(player)
-
     if not player then
         return nil
     end
@@ -55,12 +43,7 @@ function TargetManager:GetCharacter(player)
     return player.Character
 end
 
---// =========================================================
---// GET ROOT PART
---// =========================================================
-
 function TargetManager:GetRootPart(character)
-
     if not character then
         return nil
     end
@@ -68,12 +51,7 @@ function TargetManager:GetRootPart(character)
     return character:FindFirstChild("HumanoidRootPart")
 end
 
---// =========================================================
---// GET HUMANOID
---// =========================================================
-
 function TargetManager:GetHumanoid(character)
-
     if not character then
         return nil
     end
@@ -82,20 +60,17 @@ function TargetManager:GetHumanoid(character)
 end
 
 --// =========================================================
---// IS ALIVE
+--// ALIVE CHECK
 --// =========================================================
 
 function TargetManager:IsAlive(player)
-
-    local character =
-        self:GetCharacter(player)
+    local character = self:GetCharacter(player)
 
     if not character then
         return false
     end
 
-    local humanoid =
-        self:GetHumanoid(character)
+    local humanoid = self:GetHumanoid(character)
 
     if not humanoid then
         return false
@@ -105,38 +80,27 @@ function TargetManager:IsAlive(player)
 end
 
 --// =========================================================
---// GET DISTANCE
+--// DISTANCE
 --// =========================================================
 
 function TargetManager:GetDistance(player)
-
-    local localPlayer =
-        self:GetLocalPlayer()
+    local localPlayer = self:GetLocalPlayer()
 
     if not localPlayer then
         return math.huge
     end
 
-    local localCharacter =
-        self:GetCharacter(localPlayer)
+    local localCharacter = self:GetCharacter(localPlayer)
+    local targetCharacter = self:GetCharacter(player)
 
-    local targetCharacter =
-        self:GetCharacter(player)
-
-    local localRoot =
-        self:GetRootPart(localCharacter)
-
-    local targetRoot =
-        self:GetRootPart(targetCharacter)
+    local localRoot = self:GetRootPart(localCharacter)
+    local targetRoot = self:GetRootPart(targetCharacter)
 
     if not localRoot or not targetRoot then
         return math.huge
     end
 
-    return (
-        localRoot.Position -
-        targetRoot.Position
-    ).Magnitude
+    return (localRoot.Position - targetRoot.Position).Magnitude
 end
 
 --// =========================================================
@@ -144,13 +108,11 @@ end
 --// =========================================================
 
 function TargetManager:IsValidTarget(player)
-
     if not player then
         return false
     end
 
-    local localPlayer =
-        self:GetLocalPlayer()
+    local localPlayer = self:GetLocalPlayer()
 
     if Config
         and Config.Targeting
@@ -164,15 +126,13 @@ function TargetManager:IsValidTarget(player)
         return false
     end
 
-    local character =
-        self:GetCharacter(player)
+    local character = self:GetCharacter(player)
 
     if not character then
         return false
     end
 
-    local root =
-        self:GetRootPart(character)
+    local root = self:GetRootPart(character)
 
     if not root then
         return false
@@ -184,8 +144,7 @@ function TargetManager:IsValidTarget(player)
         and Config.Targeting
         and Config.Targeting.MaxDistance
     then
-        maxDistance =
-            Config.Targeting.MaxDistance
+        maxDistance = Config.Targeting.MaxDistance
     end
 
     if self:GetDistance(player) > maxDistance then
@@ -200,32 +159,17 @@ end
 --// =========================================================
 
 function TargetManager:FindTargets()
-
     table.clear(self.Targets)
 
-    for _, player in ipairs(
-        Players:GetPlayers()
-    ) do
-
+    for _, player in ipairs(Players:GetPlayers()) do
         if self:IsValidTarget(player) then
-
-            table.insert(
-                self.Targets,
-                player
-            )
-
+            table.insert(self.Targets, player)
         end
     end
 
-    table.sort(
-        self.Targets,
-        function(a, b)
-
-            return self:GetDistance(a)
-                < self:GetDistance(b)
-
-        end
-    )
+    table.sort(self.Targets, function(a, b)
+        return self:GetDistance(a) < self:GetDistance(b)
+    end)
 
     return self.Targets
 end
@@ -235,54 +179,33 @@ end
 --// =========================================================
 
 function TargetManager:Refresh()
-
     self:FindTargets()
 
     if self.CurrentTarget
-        and self:IsValidTarget(
-            self.CurrentTarget
-        )
+        and self:IsValidTarget(self.CurrentTarget)
     then
-
-        for index, player in ipairs(
-            self.Targets
-        ) do
-
-            if player ==
-                self.CurrentTarget
-            then
-
-                self.CurrentIndex =
-                    index
-
+        for index, player in ipairs(self.Targets) do
+            if player == self.CurrentTarget then
+                self.CurrentIndex = index
                 return self.CurrentTarget
             end
         end
     end
 
-    self.CurrentTarget =
-        self.Targets[1]
-
-    self.CurrentIndex =
-        self.CurrentTarget
-        and 1
-        or 0
+    self.CurrentTarget = self.Targets[1]
+    self.CurrentIndex = self.CurrentTarget and 1 or 0
 
     return self.CurrentTarget
 end
 
 --// =========================================================
---// GET CURRENT TARGET
+--// CURRENT TARGET
 --// =========================================================
 
 function TargetManager:GetCurrentTarget()
-
     if self.CurrentTarget
-        and self:IsValidTarget(
-            self.CurrentTarget
-        )
+        and self:IsValidTarget(self.CurrentTarget)
     then
-
         return self.CurrentTarget
     end
 
@@ -294,23 +217,14 @@ end
 --// =========================================================
 
 function TargetManager:SetTarget(player)
-
     if player
         and self:IsValidTarget(player)
     then
+        self.CurrentTarget = player
 
-        self.CurrentTarget =
-            player
-
-        for index, target in ipairs(
-            self.Targets
-        ) do
-
+        for index, target in ipairs(self.Targets) do
             if target == player then
-
-                self.CurrentIndex =
-                    index
-
+                self.CurrentIndex = index
                 break
             end
         end
@@ -329,17 +243,13 @@ end
 --// =========================================================
 
 function TargetManager:CycleTarget()
-
     self:FindTargets()
 
-    local count =
-        #self.Targets
+    local count = #self.Targets
 
     if count == 0 then
-
         self.CurrentTarget = nil
         self.CurrentIndex = 0
-
         return nil
     end
 
@@ -349,10 +259,7 @@ function TargetManager:CycleTarget()
         self.CurrentIndex = 1
     end
 
-    self.CurrentTarget =
-        self.Targets[
-            self.CurrentIndex
-        ]
+    self.CurrentTarget = self.Targets[self.CurrentIndex]
 
     return self.CurrentTarget
 end
@@ -362,41 +269,27 @@ end
 --// =========================================================
 
 function TargetManager:ClearTarget()
-
     self.CurrentTarget = nil
     self.CurrentIndex = 0
 end
 
 --// =========================================================
---// GET TARGETS
+--// TARGET LIST
 --// =========================================================
 
 function TargetManager:GetTargets()
     return self.Targets
 end
 
---// =========================================================
---// GET TARGET COUNT
---// =========================================================
-
 function TargetManager:GetTargetCount()
     return #self.Targets
 end
 
---// =========================================================
---// GET NEAREST TARGET
---// =========================================================
-
 function TargetManager:GetNearestTarget()
-
     self:FindTargets()
 
     return self.Targets[1]
 end
-
---// =========================================================
---// GET TARGET BY INDEX
---// =========================================================
 
 function TargetManager:GetTarget(index)
     return self.Targets[index]
@@ -407,7 +300,6 @@ end
 --// =========================================================
 
 function TargetManager:Poll()
-
     if not self.State.Running then
         return
     end
@@ -420,7 +312,6 @@ end
 --// =========================================================
 
 function TargetManager:Start()
-
     if self.State.Running then
         return
     end
@@ -429,23 +320,16 @@ function TargetManager:Start()
 
     self:Refresh()
 
-    print(
-        "[TargetManager] Started."
-    )
+    print("[TargetManager] Started.")
 
     task.spawn(function()
-
         while self.State.Running do
-
             pcall(function()
                 self:Poll()
             end)
 
-            task.wait(
-                self.PollInterval
-            )
+            task.wait(self.PollInterval)
         end
-
     end)
 end
 
@@ -454,7 +338,6 @@ end
 --// =========================================================
 
 function TargetManager:Stop()
-
     if not self.State.Running then
         return
     end
@@ -463,13 +346,9 @@ function TargetManager:Stop()
 
     self:ClearTarget()
 
-    table.clear(
-        self.Targets
-    )
+    table.clear(self.Targets)
 
-    print(
-        "[TargetManager] Stopped."
-    )
+    print("[TargetManager] Stopped.")
 end
 
 --// =========================================================
@@ -477,18 +356,13 @@ end
 --// =========================================================
 
 function TargetManager:Initialize(state)
+    self.SharedState = state
 
-    self.SharedState =
-        state
-
-    print(
-        "[TargetManager] Initialized."
-    )
+    print("[TargetManager] Initialized.")
 end
 
 --// =========================================================
 --// MATCHA MODULE RESULT
 --// =========================================================
 
-_G.__GakuranModuleResult =
-    TargetManager
+_G.__GakuranModuleResult = TargetManager
