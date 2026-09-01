@@ -85,17 +85,13 @@ function ESP:Refresh()
                     character:FindFirstChildOfClass("Humanoid")
 
                 if humanoid and humanoid.Health > 0 then
-                    if not self.Objects[player] then
-                        self:CreateHighlight(player)
-                    else
-                        local highlight = self.Objects[player]
+                    local highlight = self.Objects[player]
 
-                        if not highlight
-                            or not highlight.Parent
-                            or highlight.Adornee ~= character
-                        then
-                            self:CreateHighlight(player)
-                        end
+                    if not highlight
+                        or not highlight.Parent
+                        or highlight.Adornee ~= character
+                    then
+                        self:CreateHighlight(player)
                     end
                 else
                     self:RemoveHighlight(player)
@@ -107,9 +103,7 @@ function ESP:Refresh()
     end
 
     for player in pairs(self.Objects) do
-        if not currentPlayers[player]
-            or not player.Parent
-        then
+        if not currentPlayers[player] or not player.Parent then
             self:RemoveHighlight(player)
         end
     end
@@ -120,7 +114,7 @@ function ESP:UpdateTarget()
         return
     end
 
-    local target
+    local target = nil
 
     pcall(function()
         target = TargetManager:GetCurrentTarget()
@@ -130,11 +124,11 @@ function ESP:UpdateTarget()
         if highlight and highlight.Parent then
             if player == target then
                 highlight.FillTransparency = 0.55
-                highlight.OutlineTransparency = 0
             else
                 highlight.FillTransparency = 0.75
-                highlight.OutlineTransparency = 0
             end
+
+            highlight.OutlineTransparency = 0
         end
     end
 end
@@ -183,10 +177,7 @@ function ESP:Start()
 
     task.spawn(function()
         while self.State.Running do
-            pcall(function()
-                self:Poll()
-            end)
-
+            self:Poll()
             task.wait(self.PollInterval)
         end
     end)
