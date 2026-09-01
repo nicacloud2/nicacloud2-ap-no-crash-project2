@@ -78,18 +78,6 @@ local function LoadModule(moduleName)
 
     local modifiedSource = source
 
-    --[[
-        Matcha sometimes reports:
-
-        Expected identifier when parsing expression, got '//'
-
-        if a downloaded source contains a bare // line.
-
-        Lua comments must begin with --.
-
-        Convert only lines that actually begin with //.
-    ]]
-
     modifiedSource =
         modifiedSource:gsub(
             "([^\r\n])\n%s*//",
@@ -98,7 +86,7 @@ local function LoadModule(moduleName)
 
     modifiedSource =
         modifiedSource:gsub(
-            "^\s*//",
+            "^%s*//",
             "--//"
         )
 
@@ -262,6 +250,11 @@ local function LoadModule(moduleName)
     return result
 end
 
+
+--// =========================================================
+--// LOAD CONFIG
+--// =========================================================
+
 local Config =
     LoadModule("Config")
 
@@ -273,6 +266,11 @@ print(
     "[Main] Config check: " ..
     tostring(type(Config))
 )
+
+
+--// =========================================================
+--// LOAD ANIMATION DATABASE
+--// =========================================================
 
 local AnimationDatabase =
     LoadModule("AnimationDatabase")
@@ -314,6 +312,11 @@ end
 
 print("[Main] AnimationDatabase initialized.")
 
+
+--// =========================================================
+--// LOAD ANIMATION TRACKER
+--// =========================================================
+
 local AnimationTracker =
     LoadModule("AnimationTracker")
 
@@ -322,13 +325,20 @@ if not AnimationTracker then
 end
 
 if type(AnimationTracker.SetDependencies) == "function" then
+
     AnimationTracker:SetDependencies(
         Config,
         AnimationDatabase
     )
+
 end
 
 print("[Main] AnimationTracker dependencies set.")
+
+
+--// =========================================================
+--// LOAD TARGET MANAGER
+--// =========================================================
 
 local TargetManager =
     LoadModule("TargetManager")
@@ -343,6 +353,11 @@ end
 
 print("[Main] TargetManager config set.")
 
+
+--// =========================================================
+--// LOAD PARRY CONTROLLER
+--// =========================================================
+
 local ParryController =
     LoadModule("ParryController")
 
@@ -351,15 +366,22 @@ if not ParryController then
 end
 
 if type(ParryController.SetDependencies) == "function" then
+
     ParryController:SetDependencies(
         Config,
         AnimationDatabase,
         AnimationTracker,
         TargetManager
     )
+
 end
 
 print("[Main] ParryController dependencies set.")
+
+
+--// =========================================================
+--// LOAD LOGGER
+--// =========================================================
 
 local Logger =
     LoadModule("Logger")
@@ -369,14 +391,21 @@ if not Logger then
 end
 
 if type(Logger.SetDependencies) == "function" then
+
     Logger:SetDependencies(
         Config,
         AnimationDatabase,
         AnimationTracker
     )
+
 end
 
 print("[Main] Logger dependencies set.")
+
+
+--// =========================================================
+--// LOAD ESP
+--// =========================================================
 
 local ESP =
     LoadModule("ESP")
@@ -386,13 +415,20 @@ if not ESP then
 end
 
 if type(ESP.SetDependencies) == "function" then
+
     ESP:SetDependencies(
         Config,
         TargetManager
     )
+
 end
 
 print("[Main] ESP dependencies set.")
+
+
+--// =========================================================
+--// LOAD HEALTH OVERLAY
+--// =========================================================
 
 local HealthOverlay =
     LoadModule("HealthOverlay")
@@ -402,13 +438,20 @@ if not HealthOverlay then
 end
 
 if type(HealthOverlay.SetDependencies) == "function" then
+
     HealthOverlay:SetDependencies(
         Config,
         TargetManager
     )
+
 end
 
 print("[Main] HealthOverlay dependencies set.")
+
+
+--// =========================================================
+--// LOAD AUTOPLAY
+--// =========================================================
 
 local AutoPlay =
     LoadModule("AutoPlay")
@@ -418,14 +461,21 @@ if not AutoPlay then
 end
 
 if type(AutoPlay.SetDependencies) == "function" then
+
     AutoPlay:SetDependencies(
         Config,
         TargetManager,
         ParryController
     )
+
 end
 
 print("[Main] AutoPlay dependencies set.")
+
+
+--// =========================================================
+--// LOAD UI
+--// =========================================================
 
 local UI =
     LoadModule("UI")
@@ -435,6 +485,7 @@ if not UI then
 end
 
 if type(UI.SetDependencies) == "function" then
+
     UI:SetDependencies(
         Config,
         TargetManager,
@@ -444,9 +495,15 @@ if type(UI.SetDependencies) == "function" then
         AutoPlay,
         Logger
     )
+
 end
 
 print("[Main] UI dependencies set.")
+
+
+--// =========================================================
+--// INITIALIZE SYSTEMS
+--// =========================================================
 
 print("")
 print("========================================")
@@ -474,7 +531,9 @@ local function SafeInitialize(name, module)
     local ok,
           initializeError =
         pcall(function()
+
             module:Initialize()
+
         end)
 
     if not ok then
@@ -498,14 +557,51 @@ local function SafeInitialize(name, module)
     return true
 end
 
-SafeInitialize("AnimationTracker", AnimationTracker)
-SafeInitialize("TargetManager", TargetManager)
-SafeInitialize("ParryController", ParryController)
-SafeInitialize("Logger", Logger)
-SafeInitialize("ESP", ESP)
-SafeInitialize("HealthOverlay", HealthOverlay)
-SafeInitialize("AutoPlay", AutoPlay)
-SafeInitialize("UI", UI)
+
+SafeInitialize(
+    "AnimationTracker",
+    AnimationTracker
+)
+
+SafeInitialize(
+    "TargetManager",
+    TargetManager
+)
+
+SafeInitialize(
+    "ParryController",
+    ParryController
+)
+
+SafeInitialize(
+    "Logger",
+    Logger
+)
+
+SafeInitialize(
+    "ESP",
+    ESP
+)
+
+SafeInitialize(
+    "HealthOverlay",
+    HealthOverlay
+)
+
+SafeInitialize(
+    "AutoPlay",
+    AutoPlay
+)
+
+SafeInitialize(
+    "UI",
+    UI
+)
+
+
+--// =========================================================
+--// START SYSTEMS
+--// =========================================================
 
 print("")
 print("========================================")
@@ -532,7 +628,9 @@ local function SafeStart(name, module)
     local ok,
           startError =
         pcall(function()
+
             module:Start()
+
         end)
 
     if not ok then
@@ -556,46 +654,145 @@ local function SafeStart(name, module)
     return true
 end
 
-SafeStart("AnimationTracker", AnimationTracker)
-SafeStart("TargetManager", TargetManager)
-SafeStart("ParryController", ParryController)
-SafeStart("Logger", Logger)
-SafeStart("ESP", ESP)
-SafeStart("HealthOverlay", HealthOverlay)
-SafeStart("AutoPlay", AutoPlay)
+
+SafeStart(
+    "AnimationTracker",
+    AnimationTracker
+)
+
+SafeStart(
+    "TargetManager",
+    TargetManager
+)
+
+SafeStart(
+    "ParryController",
+    ParryController
+)
+
+SafeStart(
+    "Logger",
+    Logger
+)
+
+SafeStart(
+    "ESP",
+    ESP
+)
+
+SafeStart(
+    "HealthOverlay",
+    HealthOverlay
+)
+
+SafeStart(
+    "AutoPlay",
+    AutoPlay
+)
+
+--// UI START
+SafeStart(
+    "UI",
+    UI
+)
+
+
+--// =========================================================
+--// MATCHA COMPATIBILITY
+--// =========================================================
 
 print("[Main] Main-level input connections skipped.")
 print("[Main] Main-level character connections skipped.")
 
+
+--// =========================================================
+--// GLOBAL SYSTEM
+--// =========================================================
+
 _G.Gakuran = {
 
     Config = Config,
+
     AnimationDatabase = AnimationDatabase,
+
     AnimationTracker = AnimationTracker,
+
     TargetManager = TargetManager,
+
     ParryController = ParryController,
+
     Logger = Logger,
+
     ESP = ESP,
+
     HealthOverlay = HealthOverlay,
+
     AutoPlay = AutoPlay,
+
     UI = UI,
+
     Modules = LoadedModules
+
 }
+
+
+--// =========================================================
+--// READY
+--// =========================================================
 
 print("")
 print("========================================")
 print("       GAKURAN SYSTEM READY")
 print("========================================")
 
-print("[Main] Config: " .. tostring(type(Config)))
-print("[Main] AnimationDatabase: " .. tostring(type(AnimationDatabase)))
-print("[Main] AnimationTracker: " .. tostring(type(AnimationTracker)))
-print("[Main] TargetManager: " .. tostring(type(TargetManager)))
-print("[Main] ParryController: " .. tostring(type(ParryController)))
-print("[Main] Logger: " .. tostring(type(Logger)))
-print("[Main] ESP: " .. tostring(type(ESP)))
-print("[Main] HealthOverlay: " .. tostring(type(HealthOverlay)))
-print("[Main] AutoPlay: " .. tostring(type(AutoPlay)))
-print("[Main] UI: " .. tostring(type(UI)))
+print(
+    "[Main] Config: " ..
+    tostring(type(Config))
+)
+
+print(
+    "[Main] AnimationDatabase: " ..
+    tostring(type(AnimationDatabase))
+)
+
+print(
+    "[Main] AnimationTracker: " ..
+    tostring(type(AnimationTracker))
+)
+
+print(
+    "[Main] TargetManager: " ..
+    tostring(type(TargetManager))
+)
+
+print(
+    "[Main] ParryController: " ..
+    tostring(type(ParryController))
+)
+
+print(
+    "[Main] Logger: " ..
+    tostring(type(Logger))
+)
+
+print(
+    "[Main] ESP: " ..
+    tostring(type(ESP))
+)
+
+print(
+    "[Main] HealthOverlay: " ..
+    tostring(type(HealthOverlay))
+)
+
+print(
+    "[Main] AutoPlay: " ..
+    tostring(type(AutoPlay))
+)
+
+print(
+    "[Main] UI: " ..
+    tostring(type(UI))
+)
 
 print("========================================")
