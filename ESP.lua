@@ -1,263 +1,533 @@
 --// ESP.lua
---// Gakuran Script - ESP System
+--// Gakuran ESP Module
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+local Config = require(script.Parent.Config)
+local TargetManager = require(script.Parent.TargetManager)
+local AnimationTracker = require(script.Parent.AnimationTracker)
+
 local ESP = {}
 
+--------------------------------------------------
+--// State
+--------------------------------------------------
+
 ESP.State = nil
-ESP.Config = nil
-ESP.Connections = {}
+ESP.Running = false
+
 ESP.Objects = {}
+ESP.TargetHighlight = nil
 
---==================================================
--- Initialization
---==================================================
+--------------------------------------------------
+--// Initialize
+--------------------------------------------------
 
-function ESP:Initialize(State, Config)
+function ESP:Initialize(State)
     self.State = State
-    self.Config = Config
-
-    table.clear(self.Connections)
-    table.clear(self.Objects)
-
-    if not self:IsEnabled() then
-        return
-    end
-
-    self:CreateObjects()
-    self:StartUpdate()
 end
 
---==================================================
--- Configuration
---==================================================
+--------------------------------------------------
+--// Create Highlight
+--------------------------------------------------
 
-function ESP:IsEnabled()
-    return self.Config
-        and self.Config.ESP
-        and self.Config.ESP.Enabled
-end
-
---==================================================
--- Character Validation
---==================================================
-
-function ESP:IsValidCharacter(character)
+function ESP:CreateHighlight(character)
     if not character then
-        return false
+        return nil
     end
 
-    local humanoid = character:FindFirstChildOfClass("Humanoid")
-    local root = character:FindFirstChild("HumanoidRootPart")
+    local existing = character:FindFirstChild(
+        "GakuranESPHighlight"
+    )
 
-    return humanoid ~= nil and root ~= nil and humanoid.Health > 0
-end
-
---==================================================
--- Create ESP Objects
---==================================================
-
-function ESP:CreateObjects()
-    if not self.State then
-        return
-    end
-
-    for _, player in ipairs(Players:GetPlayers()) do
-        self:AddPlayer(player)
-    end
-
-    local connection = Players.PlayerAdded:Connect(function(player)
-        self:AddPlayer(player)
-    end)
-
-    table.insert(self.Connections, connection)
-
-    local removingConnection = Players.PlayerRemoving:Connect(function(player)
-        self:RemovePlayer(player)
-    end)
-
-    table.insert(self.Connections, removingConnection)
-end
-
---==================================================
--- Add Player
---==================================================
-
-function ESP:AddPlayer(player)
-    if not player or player == Players.LocalPlayer then
-        return
-    end
-
-    if self.Objects[player] then
-        return
-    end
-
-    self.Objects[player] = {
-        Player = player,
-        Character = nil,
-        Highlight = nil,
-    }
-
-    local characterConnection = player.CharacterAdded:Connect(function(character)
-        self:SetCharacter(player, character)
-    end)
-
-    self.Objects[player].CharacterConnection = characterConnection
-
-    if player.Character then
-        self:SetCharacter(player, player.Character)
-    end
-end
-
---==================================================
--- Set Character
---==================================================
-
-function ESP:SetCharacter(player, character)
-    local data = self.Objects[player]
-
-    if not data then
-        return
-    end
-
-    data.Character = character
-
-    -- Remove previous highlight
-    if data.Highlight then
-        pcall(function()
-            data.Highlight:Destroy()
-        end)
-
-        data.Highlight = nil
-    end
-
-    if not self:IsValidCharacter(character) then
-        return
+    if existing then
+        return existing
     end
 
     local highlight = Instance.new("Highlight")
 
-    highlight.Name = "GakuranESP"
+    highlight.Name = "GakuranESPHighlight"
     highlight.Adornee = character
-    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
 
     highlight.FillTransparency = 0.75
     highlight.OutlineTransparency = 0
 
+    highlight.Enabled = Config.ESP.Enabled
+
     highlight.Parent = character
 
-    data.Highlight = highlight
+    return highlight
 end
 
---==================================================
--- Update
---==================================================
+--------------------------------------------------
+--// Remove Highlight
+--------------------------------------------------
 
-function ESP:Update()
-    if not self.State or not self.State.Alive then
+function ESP:RemoveHighlight(character)
+    if not character then
         return
     end
 
-    if not self:IsEnabled() then
+    local highlight = character:FindFirstChild(
+        "GakuranESPHighlight"
+    )
+
+    if highlight then
+        highlight:Destroy()
+    end
+end
+
+--------------------------------------------------
+--// Update Target Highlight
+--------------------------------------------------
+
+function ESP:UpdateTargetHighlight()
+    if not Config.ESP.ShowTarget then
         return
     end
 
-    for player, data in pairs(self.Objects) do
-        local character = data.Character
+    local target =
+        TargetManager:GetCurrentTarget()
 
-        if character and self:IsValidCharacter(character) then
-            local humanoid =
-                character:FindFirstChildOfClass("Humanoid")
+    --------------------------------------------------
+    -- Remove old target highlight
+    --------------------------------------------------
 
-            if data.Highlight then
-                data.Highlight.Enabled = true
-            end
+    if self.TargetHighlight
+        and self.TargetHighlight ~= target
+    then
 
-            -- Store ESP tracker data
-            if self.State.EspTrackers then
-                self.State.EspTrackers[player] = {
-                    Character = character,
-                    Health = humanoid.Health,
-                    MaxHealth = humanoid.MaxHealth,
-                }
-            end
-        else
-            if data.Highlight then
-                data.Highlight.Enabled = false
+        self:RemoveHighlight(
+            self.TargetHighlight
+        )
+
+        self.TargetHighlight = nil
+    end
+
+    --------------------------------------------------
+    -- Apply new highlight
+    --------------------------------------------------
+
+    if target then
+        self:CreateHighlight(target)
+
+        self.TargetHighlight = target
+    end
+end
+
+--------------------------------------------------
+--// Create Billboard
+--------------------------------------------------
+
+function ESP:CreateBillboard(character)
+    if not character then
+        return nil
+    end
+
+    local root =
+        character:FindFirstChild("HumanoidRootPart")
+
+    if not root then
+        return nil
+    end
+
+    local existing = root:FindFirstChild(
+        "GakuranESP"
+    )
+
+    if existing then
+        return existing
+    end
+
+    local billboard = Instance.new("BillboardGui")
+
+    billboard.Name = "GakuranESP"
+    billboard.Adornee = root
+
+    billboard.Size = UDim2.new(
+        0,
+        200,
+        0,
+        70
+    )
+
+    billboard.StudsOffset =
+        Vector3.new(0, 3, 0)
+
+    billboard.AlwaysOnTop = true
+
+    billboard.Enabled =
+        Config.ESP.Enabled
+
+    billboard.Parent = root
+
+    --------------------------------------------------
+    -- Main Text
+    --------------------------------------------------
+
+    local text = Instance.new("TextLabel")
+
+    text.Name = "Info"
+    text.Size = UDim2.fromScale(1, 1)
+
+    text.BackgroundTransparency = 1
+
+    text.TextScaled = false
+    text.TextSize = 14
+
+    text.Font =
+        Enum.Font.GothamBold
+
+    text.Text = ""
+
+    text.Parent = billboard
+
+    return billboard
+end
+
+--------------------------------------------------
+--// Update Billboard
+--------------------------------------------------
+
+function ESP:UpdateBillboard(character)
+    if not character then
+        return
+    end
+
+    local humanoid =
+        character:FindFirstChildOfClass(
+            "Humanoid"
+        )
+
+    local root =
+        character:FindFirstChild(
+            "HumanoidRootPart"
+        )
+
+    if not humanoid or not root then
+        return
+    end
+
+    local billboard =
+        self:CreateBillboard(character)
+
+    if not billboard then
+        return
+    end
+
+    local text =
+        billboard:FindFirstChild("Info")
+
+    if not text then
+        return
+    end
+
+    --------------------------------------------------
+    -- Distance
+    --------------------------------------------------
+
+    local distance =
+        TargetManager:GetDistance(character)
+
+    --------------------------------------------------
+    -- Player Name
+    --------------------------------------------------
+
+    local player =
+        Players:GetPlayerFromCharacter(
+            character
+        )
+
+    local name =
+        player
+        and player.DisplayName
+        or character.Name
+
+    --------------------------------------------------
+    -- Animation
+    --------------------------------------------------
+
+    local animationText = ""
+
+    local tracks =
+        AnimationTracker:GetPlayingAnimations(
+            character
+        )
+
+    for _, track in ipairs(tracks) do
+
+        local animationId =
+            AnimationTracker:GetAnimationId(
+                track
+            )
+
+        if animationId
+            and AnimationTracker:IsKnown(
+                animationId
+            )
+        then
+
+            animationText =
+                AnimationTracker:GetDisplayName(
+                    animationId
+                )
+
+            break
+        end
+    end
+
+    --------------------------------------------------
+    -- Build Text
+    --------------------------------------------------
+
+    local lines = {}
+
+    if Config.ESP.ShowName then
+        table.insert(
+            lines,
+            name
+        )
+    end
+
+    if Config.ESP.ShowDistance then
+        table.insert(
+            lines,
+            string.format(
+                "%.1f studs",
+                distance
+            )
+        )
+    end
+
+    if animationText ~= "" then
+        table.insert(
+            lines,
+            animationText
+        )
+    end
+
+    if Config.ESP.ShowHealth then
+        table.insert(
+            lines,
+            string.format(
+                "HP: %.0f / %.0f",
+                humanoid.Health,
+                humanoid.MaxHealth
+            )
+        )
+    end
+
+    text.Text =
+        table.concat(lines, "\n")
+end
+
+--------------------------------------------------
+--// Setup Character
+--------------------------------------------------
+
+function ESP:SetupCharacter(character)
+    if not character then
+        return
+    end
+
+    if character == LocalPlayer.Character then
+        return
+    end
+
+    self.Objects[character] = true
+
+    self:CreateHighlight(character)
+    self:CreateBillboard(character)
+end
+
+--------------------------------------------------
+--// Remove Character
+--------------------------------------------------
+
+function ESP:RemoveCharacter(character)
+    if not character then
+        return
+    end
+
+    self:RemoveHighlight(character)
+
+    local root =
+        character:FindFirstChild(
+            "HumanoidRootPart"
+        )
+
+    if root then
+        local billboard =
+            root:FindFirstChild(
+                "GakuranESP"
+            )
+
+        if billboard then
+            billboard:Destroy()
+        end
+    end
+
+    self.Objects[character] = nil
+end
+
+--------------------------------------------------
+--// Refresh
+--------------------------------------------------
+
+function ESP:Refresh()
+    if not Config.ESP.Enabled then
+        self:HideAll()
+        return
+    end
+
+    local targets =
+        TargetManager:GetTargets()
+
+    local active = {}
+
+    for _, character in ipairs(targets) do
+
+        if TargetManager:IsValidCharacter(
+            character
+        ) then
+
+            active[character] = true
+
+            self:SetupCharacter(character)
+
+            self:UpdateBillboard(character)
+        end
+    end
+
+    --------------------------------------------------
+    -- Remove old objects
+    --------------------------------------------------
+
+    for character in pairs(self.Objects) do
+
+        if not active[character] then
+            self:RemoveCharacter(character)
+        end
+
+    end
+
+    self:UpdateTargetHighlight()
+end
+
+--------------------------------------------------
+--// Hide All
+--------------------------------------------------
+
+function ESP:HideAll()
+    for character in pairs(self.Objects) do
+
+        local highlight =
+            character:FindFirstChild(
+                "GakuranESPHighlight"
+            )
+
+        if highlight then
+            highlight.Enabled = false
+        end
+
+        local root =
+            character:FindFirstChild(
+                "HumanoidRootPart"
+            )
+
+        if root then
+            local billboard =
+                root:FindFirstChild(
+                    "GakuranESP"
+                )
+
+            if billboard then
+                billboard.Enabled = false
             end
         end
     end
 end
 
---==================================================
--- Update Loop
---==================================================
+--------------------------------------------------
+--// Show All
+--------------------------------------------------
 
-function ESP:StartUpdate()
-    local connection = RunService.RenderStepped:Connect(function()
-        self:Update()
-    end)
+function ESP:ShowAll()
+    for character in pairs(self.Objects) do
 
-    table.insert(self.Connections, connection)
+        local highlight =
+            character:FindFirstChild(
+                "GakuranESPHighlight"
+            )
+
+        if highlight then
+            highlight.Enabled =
+                Config.ESP.Enabled
+        end
+
+        local root =
+            character:FindFirstChild(
+                "HumanoidRootPart"
+            )
+
+        if root then
+            local billboard =
+                root:FindFirstChild(
+                    "GakuranESP"
+                )
+
+            if billboard then
+                billboard.Enabled =
+                    Config.ESP.Enabled
+            end
+        end
+    end
 end
 
---==================================================
--- Remove Player
---==================================================
+--------------------------------------------------
+--// Start
+--------------------------------------------------
 
-function ESP:RemovePlayer(player)
-    local data = self.Objects[player]
-
-    if not data then
+function ESP:Start()
+    if self.Running then
         return
     end
 
-    if data.CharacterConnection then
-        pcall(function()
-            data.CharacterConnection:Disconnect()
-        end)
-    end
+    self.Running = true
 
-    if data.Highlight then
-        pcall(function()
-            data.Highlight:Destroy()
-        end)
-    end
+    task.spawn(function()
 
-    self.Objects[player] = nil
+        while self.Running do
 
-    if self.State and self.State.EspTrackers then
-        self.State.EspTrackers[player] = nil
-    end
+            if Config.ESP.Enabled then
+                self:Refresh()
+            else
+                self:HideAll()
+            end
+
+            task.wait(0.1)
+        end
+
+    end)
 end
 
---==================================================
--- Cleanup
---==================================================
+--------------------------------------------------
+--// Stop
+--------------------------------------------------
 
-function ESP:Destroy()
-    for _, connection in ipairs(self.Connections) do
-        pcall(function()
-            connection:Disconnect()
-        end)
+function ESP:Stop()
+    self.Running = false
+
+    for character in pairs(self.Objects) do
+        self:RemoveCharacter(character)
     end
 
-    table.clear(self.Connections)
-
-    for player in pairs(self.Objects) do
-        self:RemovePlayer(player)
-    end
-
-    table.clear(self.Objects)
-
-    if self.State and self.State.EspTrackers then
-        table.clear(self.State.EspTrackers)
-    end
-
-    self.State = nil
-    self.Config = nil
+    self.Objects = {}
+    self.TargetHighlight = nil
 end
 
 return ESP
