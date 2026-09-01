@@ -22,19 +22,31 @@ print("========================================")
 print("[Main] Loading modules...")
 print("")
 
+math.randomseed(
+    os.time() +
+    math.floor((os.clock() or 0) * 100000)
+)
+
 local function LoadModule(moduleName)
 
     print("")
     print("----------------------------------------")
     print("[Main] Downloading: " .. moduleName)
 
-    --// Cache buster
-    local cacheBust = tostring(os.time()) .. "_" .. moduleName
+    --// Strong cache buster
+    local cacheBust =
+        tostring(os.time()) ..
+        "_" ..
+        tostring(math.floor((os.clock() or 0) * 1000000)) ..
+        "_" ..
+        tostring(math.random(100000, 999999)) ..
+        "_" ..
+        moduleName
 
     local url =
         BASE_URL ..
         moduleName ..
-        ".lua?v=" ..
+        ".lua?cb=" ..
         cacheBust
 
     print("[Main] URL: " .. url)
@@ -45,46 +57,127 @@ local function LoadModule(moduleName)
         end)
 
     if not downloadSuccess then
-        warn("[Main] Failed to download " .. moduleName)
+
+        warn(
+            "[Main] Failed to download " ..
+            moduleName
+        )
+
         warn(tostring(source))
+
         return nil
     end
 
     if type(source) ~= "string" then
-        warn("[Main] Invalid source type for " .. moduleName)
+
+        warn(
+            "[Main] Invalid source type for " ..
+            moduleName
+        )
+
         return nil
     end
 
     if source == "" then
-        warn("[Main] Empty source for " .. moduleName)
+
+        warn(
+            "[Main] Empty source for " ..
+            moduleName
+        )
+
         return nil
     end
 
-    print("[Main] Source length: " .. tostring(#source))
+    print(
+        "[Main] Source length: " ..
+        tostring(#source)
+    )
 
     print(
         "[Main] Source preview: " ..
         string.sub(source, 1, 120)
     )
 
+    --// GitHub error detection
     if source == "404: Not Found"
         or source:find("^404")
     then
-        warn("[Main] GitHub returned 404 for " .. moduleName)
+
+        warn(
+            "[Main] GitHub returned 404 for " ..
+            moduleName
+        )
+
         return nil
     end
 
     if source:find("^403")
         or source:find("403: Forbidden")
     then
-        warn("[Main] GitHub returned 403 for " .. moduleName)
+
+        warn(
+            "[Main] GitHub returned 403 for " ..
+            moduleName
+        )
+
         return nil
     end
+
+    --// =====================================================
+    --// SOURCE VERSION CHECK
+    --// =====================================================
+
+    if moduleName == "HealthOverlay" then
+
+        print("[Main] HealthOverlay source inspection:")
+
+        if source:find("Drawing%.new") then
+            print(
+                "[Main] ✓ Drawing.new FOUND"
+            )
+        else
+            warn(
+                "[Main] ✗ Drawing.new NOT FOUND"
+            )
+        end
+
+        if source:find("Instance%.new") then
+            warn(
+                "[Main] ✗ Instance.new FOUND"
+            )
+        else
+            print(
+                "[Main] ✓ Instance.new NOT FOUND"
+            )
+        end
+
+    end
+
+    if moduleName == "ESP" then
+
+        print("[Main] ESP source inspection:")
+
+        if source:find("Drawing%.new") then
+            print(
+                "[Main] ✓ Drawing.new FOUND"
+            )
+        else
+            warn(
+                "[Main] ✗ Drawing.new NOT FOUND"
+            )
+        end
+
+    end
+
+    --// =====================================================
+    --// CLEAR PREVIOUS MODULE RESULT
+    --// =====================================================
 
     _G.__GakuranModuleResult = nil
 
     local modifiedSource = source
 
+    --// Convert bare // comment lines to Lua comments
     modifiedSource =
         modifiedSource:gsub(
             "([^\r\n])\n%s*//",
@@ -96,6 +189,10 @@ local function LoadModule(moduleName)
             "^%s*//",
             "--//"
         )
+
+    --// =====================================================
+    --// MODULE RESULT HANDLING
+    --// =====================================================
 
     local hasGlobalResult =
         source:find(
@@ -145,6 +242,10 @@ local function LoadModule(moduleName)
         end
     end
 
+    --// =====================================================
+    --// COMPILE
+    --// =====================================================
+
     print(
         "[Main] Compiling: " ..
         moduleName
@@ -183,6 +284,10 @@ local function LoadModule(moduleName)
         "[Main] Compilation successful: " ..
         moduleName
     )
+
+    --// =====================================================
+    --// EXECUTE
+    --// =====================================================
 
     print(
         "[Main] Executing: " ..
