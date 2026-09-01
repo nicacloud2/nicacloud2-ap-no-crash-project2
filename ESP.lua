@@ -20,10 +20,6 @@ ESP.State = {
 ESP.Objects = {}
 ESP.PollInterval = 0.03
 
---// =========================================================
---// DEPENDENCIES
---// =========================================================
-
 function ESP:SetDependencies(config, targetManager)
     Config = config
     TargetManager = targetManager
@@ -33,22 +29,13 @@ end
 
 function ESP:Initialize(state)
     self.SharedState = state
-
     print("[ESP] Initialized.")
 end
 
---// =========================================================
---// DRAWING CHECK
---// =========================================================
-
 function ESP:IsDrawingAvailable()
-    return type(Drawing) == "table"
+    return Drawing ~= nil
         and type(Drawing.new) == "function"
 end
-
---// =========================================================
---// CREATE ESP
---// =========================================================
 
 function ESP:CreateESP(player)
     if not player then
@@ -68,14 +55,15 @@ function ESP:CreateESP(player)
     end
 
     local success, result = pcall(function()
-
         local box = Drawing.new("Square")
+
         box.Visible = false
         box.Filled = false
         box.Thickness = 1
         box.Transparency = 1
 
         local name = Drawing.new("Text")
+
         name.Visible = false
         name.Center = true
         name.Outline = true
@@ -86,18 +74,12 @@ function ESP:CreateESP(player)
             Box = box,
             Name = name
         }
-
     end)
 
     if not success then
         warn("[ESP] Failed to create drawing:", tostring(result))
-        return
     end
 end
-
---// =========================================================
---// REMOVE ESP
---// =========================================================
 
 function ESP:RemoveESP(player)
     local object = self.Objects[player]
@@ -123,16 +105,8 @@ function ESP:RemoveESP(player)
     self.Objects[player] = nil
 end
 
---// =========================================================
---// UPDATE PLAYER
---// =========================================================
-
 function ESP:UpdatePlayer(player)
-    if not player then
-        return
-    end
-
-    if player == Players.LocalPlayer then
+    if not player or player == Players.LocalPlayer then
         return
     end
 
@@ -190,7 +164,6 @@ function ESP:UpdatePlayer(player)
         return
     end
 
-    --// Distance based box size
     local distance = screenPosition.Z
 
     local height = math.clamp(
@@ -216,10 +189,6 @@ function ESP:UpdatePlayer(player)
     object.Name.Visible = true
 end
 
---// =========================================================
---// REFRESH
---// =========================================================
-
 function ESP:Refresh()
     if not self.State.Enabled then
         return
@@ -228,7 +197,6 @@ function ESP:Refresh()
     local currentPlayers = {}
 
     for _, player in ipairs(Players:GetPlayers()) do
-
         currentPlayers[player] = true
 
         if player ~= Players.LocalPlayer then
@@ -243,10 +211,6 @@ function ESP:Refresh()
     end
 end
 
---// =========================================================
---// TARGET UPDATE
---// =========================================================
-
 function ESP:UpdateTarget()
     if not TargetManager then
         return
@@ -259,7 +223,6 @@ function ESP:UpdateTarget()
     end)
 
     for player, object in pairs(self.Objects) do
-
         if object and object.Box and object.Name then
 
             local isTarget = player == target
@@ -277,10 +240,6 @@ function ESP:UpdateTarget()
         end
     end
 end
-
---// =========================================================
---// POLL
---// =========================================================
 
 function ESP:Poll()
     if not self.State.Running then
@@ -300,20 +259,13 @@ function ESP:Poll()
     end)
 end
 
---// =========================================================
---// ENABLE / DISABLE
---// =========================================================
-
 function ESP:SetEnabled(enabled)
-
     self.State.Enabled = enabled == true
 
     if not self.State.Enabled then
-
         for player in pairs(self.Objects) do
             self:RemoveESP(player)
         end
-
     end
 end
 
@@ -321,12 +273,7 @@ function ESP:IsEnabled()
     return self.State.Enabled
 end
 
---// =========================================================
---// START
---// =========================================================
-
 function ESP:Start()
-
     if self.State.Running then
         return
     end
@@ -344,26 +291,16 @@ function ESP:Start()
     self:UpdateTarget()
 
     task.spawn(function()
-
         while self.State.Running do
-
             self:Poll()
-
             task.wait(self.PollInterval)
-
         end
-
     end)
 
     print("[ESP] Started.")
 end
 
---// =========================================================
---// STOP
---// =========================================================
-
 function ESP:Stop()
-
     if not self.State.Running then
         return
     end
@@ -377,17 +314,9 @@ function ESP:Stop()
     print("[ESP] Stopped.")
 end
 
---// =========================================================
---// DESTROY
---// =========================================================
-
 function ESP:Destroy()
     self:Stop()
 end
-
---// =========================================================
---// MODULE EXPORT
---// =========================================================
 
 _G.__GakuranModuleResult = ESP
 return ESP
