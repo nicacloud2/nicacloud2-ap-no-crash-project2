@@ -1,7 +1,7 @@
 --// =========================================================
 --// GAKURAN - HEALTH OVERLAY
 --// GitHub / Matcha Version
---// MATCHA DRAWING + WORLDTOSCREEN
+--// MATCHA DRAWING VERSION
 --// =========================================================
 
 local Players = game:GetService("Players")
@@ -20,10 +20,6 @@ HealthOverlay.Objects = {}
 HealthOverlay.PollInterval = 0.15
 
 
---// =========================================================
---// DEPENDENCIES
---// =========================================================
-
 function HealthOverlay:SetDependencies(config, targetManager)
 
     Config = config
@@ -33,10 +29,6 @@ function HealthOverlay:SetDependencies(config, targetManager)
 end
 
 
---// =========================================================
---// INITIALIZE
---// =========================================================
-
 function HealthOverlay:Initialize(state)
 
     self.SharedState = state
@@ -44,10 +36,6 @@ function HealthOverlay:Initialize(state)
     print("[HealthOverlay] Initialized.")
 end
 
-
---// =========================================================
---// CREATE
---// =========================================================
 
 function HealthOverlay:Create(player)
 
@@ -84,10 +72,6 @@ function HealthOverlay:Create(player)
 end
 
 
---// =========================================================
---// REMOVE
---// =========================================================
-
 function HealthOverlay:Remove(player)
 
     local object = self.Objects[player]
@@ -97,28 +81,20 @@ function HealthOverlay:Remove(player)
     end
 
     if object.HealthBar then
-
         pcall(function()
             object.HealthBar:Remove()
         end)
-
     end
 
     if object.Text then
-
         pcall(function()
             object.Text:Remove()
         end)
-
     end
 
     self.Objects[player] = nil
 end
 
-
---// =========================================================
---// HIDE
---// =========================================================
 
 function HealthOverlay:Hide(object)
 
@@ -137,47 +113,31 @@ end
 
 
 --// =========================================================
---// WORLD TO SCREEN
---// MATCHA COMPATIBILITY
+--// MATCHA WORLD TO SCREEN
 --// =========================================================
 
 function HealthOverlay:GetScreenPosition(position)
 
     if type(WorldToScreen) ~= "function" then
-
-        warn(
-            "[HealthOverlay] Matcha WorldToScreen unavailable."
-        )
-
         return nil, false
     end
 
-    local success,
-          screenPosition,
-          onScreen =
+    local success, screenPosition, onScreen =
         pcall(function()
-
             return WorldToScreen(position)
-
         end)
 
     if not success then
-
         return nil, false
     end
 
     if not screenPosition then
-
         return nil, false
     end
 
     return screenPosition, onScreen == true
 end
 
-
---// =========================================================
---// UPDATE PLAYER
---// =========================================================
 
 function HealthOverlay:UpdatePlayer(player)
 
@@ -217,20 +177,19 @@ function HealthOverlay:UpdatePlayer(player)
         return
     end
 
-    --// =====================================================
-    --// MATCHA WORLD TO SCREEN
-    --// =====================================================
 
-    local screenPosition,
-          onScreen =
+    --// MATCHA PROJECTION
+
+    local screenPosition, onScreen =
         self:GetScreenPosition(root.Position)
 
     if not screenPosition or not onScreen then
-
         self:Hide(object)
-
         return
     end
+
+
+    --// HEALTH PERCENTAGE
 
     local percentage =
         math.clamp(
@@ -239,20 +198,16 @@ function HealthOverlay:UpdatePlayer(player)
             1
         )
 
-    --// =====================================================
-    --// DISTANCE
-    --// =====================================================
 
-    local camera = workspace.CurrentCamera
+    --// DISTANCE
 
     local distance = 50
 
-    if camera
-        and camera.Position
-    then
+    local camera = workspace.CurrentCamera
 
-        local success,
-              calculatedDistance =
+    if camera then
+
+        local success, calculatedDistance =
             pcall(function()
 
                 return (
@@ -262,17 +217,13 @@ function HealthOverlay:UpdatePlayer(player)
 
             end)
 
-        if success
-            and calculatedDistance
-        then
-
+        if success and calculatedDistance then
             distance = calculatedDistance
         end
     end
 
-    --// =====================================================
+
     --// SIZE
-    --// =====================================================
 
     local height =
         math.clamp(
@@ -293,9 +244,7 @@ function HealthOverlay:UpdatePlayer(player)
         height * percentage
 
 
-    --// =====================================================
     --// HEALTH BAR
-    --// =====================================================
 
     object.HealthBar.Position =
         Vector2.new(
@@ -312,9 +261,7 @@ function HealthOverlay:UpdatePlayer(player)
     object.HealthBar.Visible = true
 
 
-    --// =====================================================
     --// HEALTH TEXT
-    --// =====================================================
 
     object.Text.Position =
         Vector2.new(
@@ -332,10 +279,6 @@ function HealthOverlay:UpdatePlayer(player)
     object.Text.Visible = true
 end
 
-
---// =========================================================
---// REFRESH
---// =========================================================
 
 function HealthOverlay:Refresh()
 
@@ -359,7 +302,6 @@ function HealthOverlay:Refresh()
         end
     end
 
-    --// Remove players that left
 
     for player in pairs(self.Objects) do
 
@@ -372,10 +314,6 @@ function HealthOverlay:Refresh()
     end
 end
 
-
---// =========================================================
---// POLL
---// =========================================================
 
 function HealthOverlay:Poll()
 
@@ -392,10 +330,6 @@ function HealthOverlay:Poll()
     end)
 end
 
-
---// =========================================================
---// ENABLE
---// =========================================================
 
 function HealthOverlay:SetEnabled(enabled)
 
@@ -416,10 +350,6 @@ function HealthOverlay:IsEnabled()
     return self.State.Enabled
 end
 
-
---// =========================================================
---// START
---// =========================================================
 
 function HealthOverlay:Start()
 
@@ -470,10 +400,6 @@ function HealthOverlay:Start()
 end
 
 
---// =========================================================
---// STOP
---// =========================================================
-
 function HealthOverlay:Stop()
 
     if not self.State.Running then
@@ -490,18 +416,10 @@ function HealthOverlay:Stop()
 end
 
 
---// =========================================================
---// DESTROY
---// =========================================================
-
 function HealthOverlay:Destroy()
 
     self:Stop()
 end
 
-
---// =========================================================
---// MATCHA MODULE RESULT
---// =========================================================
 
 _G.__GakuranModuleResult = HealthOverlay
