@@ -1,9 +1,3 @@
---// =========================================================
---// GAKURAN - ESP
---// GitHub / Matcha Version
---// Polling-Safe Edition
---// =========================================================
-
 local Players = game:GetService("Players")
 
 local ESP = {}
@@ -19,28 +13,15 @@ ESP.State = {
 ESP.Objects = {}
 ESP.PollInterval = 0.15
 
---// =========================================================
---// DEPENDENCIES
---// =========================================================
-
 function ESP:SetDependencies(config, targetManager)
     Config = config
     TargetManager = targetManager
 end
 
---// =========================================================
---// INITIALIZE
---// =========================================================
-
 function ESP:Initialize(state)
     self.SharedState = state
-
     print("[ESP] Initialized.")
 end
-
---// =========================================================
---// CREATE HIGHLIGHT
---// =========================================================
 
 function ESP:CreateHighlight(player)
     if not player then
@@ -72,10 +53,6 @@ function ESP:CreateHighlight(player)
     self.Objects[player] = highlight
 end
 
---// =========================================================
---// REMOVE HIGHLIGHT
---// =========================================================
-
 function ESP:RemoveHighlight(player)
     local highlight = self.Objects[player]
 
@@ -89,10 +66,6 @@ function ESP:RemoveHighlight(player)
 
     self.Objects[player] = nil
 end
-
---// =========================================================
---// REFRESH PLAYERS
---// =========================================================
 
 function ESP:Refresh()
     if not self.State.Enabled then
@@ -133,8 +106,6 @@ function ESP:Refresh()
         end
     end
 
-    --// Remove players that no longer exist
-
     for player in pairs(self.Objects) do
         if not currentPlayers[player]
             or not player.Parent
@@ -143,10 +114,6 @@ function ESP:Refresh()
         end
     end
 end
-
---// =========================================================
---// TARGET HIGHLIGHT
---// =========================================================
 
 function ESP:UpdateTarget()
     if not TargetManager then
@@ -172,10 +139,6 @@ function ESP:UpdateTarget()
     end
 end
 
---// =========================================================
---// POLL
---// =========================================================
-
 function ESP:Poll()
     if not self.State.Running then
         return
@@ -194,10 +157,6 @@ function ESP:Poll()
     end)
 end
 
---// =========================================================
---// ENABLE / DISABLE
---// =========================================================
-
 function ESP:SetEnabled(enabled)
     self.State.Enabled = enabled == true
 
@@ -211,10 +170,6 @@ end
 function ESP:IsEnabled()
     return self.State.Enabled
 end
-
---// =========================================================
---// START
---// =========================================================
 
 function ESP:Start()
     if self.State.Running then
@@ -239,10 +194,6 @@ function ESP:Start()
     print("[ESP] Started.")
 end
 
---// =========================================================
---// STOP
---// =========================================================
-
 function ESP:Stop()
     if not self.State.Running then
         return
@@ -257,17 +208,8 @@ function ESP:Stop()
     print("[ESP] Stopped.")
 end
 
---// =========================================================
---// DESTROY
---// =========================================================
-
 function ESP:Destroy()
     self:Stop()
 end
-
---// =========================================================
---// MATCHA MODULE RESULT
---// IMPORTANT: DO NOT CHANGE THIS TO "return ESP"
-// =========================================================
 
 _G.__GakuranModuleResult = ESP
