@@ -31,51 +31,59 @@ local function LoadModule(moduleName)
         return Modules[moduleName]
     end
 
-
     local url =
         BASE_URL .. moduleName .. ".lua"
 
+    print("[Main] Downloading:", moduleName)
 
-    print(
-        "[Main] Downloading: "
-        .. moduleName
-        .. ".lua"
-    )
-
-
-    local success, source =
-        pcall(function()
-
-            return game:HttpGet(url)
-
-        end)
-
+    local success, source = pcall(function()
+        return game:HttpGet(url)
+    end)
 
     if not success then
-
         error(
-            "[Main] Failed to download "
+            "[Main] HTTP request failed for "
             .. moduleName
             .. ".lua\n"
             .. tostring(source)
         )
-
     end
 
-
-    if not source
-        or source == ""
-        or source:match("^404")
-        or source:match("404: Not Found") then
-
+    if type(source) ~= "string" then
         error(
-            "[Main] 404 - File not found: "
+            "[Main] Invalid response for "
             .. moduleName
             .. ".lua"
+        )
+    end
+
+    --// Catch GitHub 404 responses
+    local firstLine =
+        source:match("^[^\r\n]*")
+
+    if firstLine
+        and (
+            firstLine:match("^404")
+            or firstLine:match("404: Not Found")
+            or firstLine:match("Not Found")
+        ) then
+
+        error(
+            "[Main] GitHub returned 404 for "
+            .. moduleName
+            .. ".lua\n"
+            .. url
         )
 
     end
 
+    if #source < 10 then
+        error(
+            "[Main] Empty/invalid source for "
+            .. moduleName
+            .. ".lua"
+        )
+    end
 
     local compileSuccess, moduleFunction =
         pcall(function()
@@ -87,12 +95,10 @@ local function LoadModule(moduleName)
 
         end)
 
-
-    if not compileSuccess
-        or not moduleFunction then
+    if not compileSuccess then
 
         error(
-            "[Main] Failed to compile "
+            "[Main] Compiler error in "
             .. moduleName
             .. ".lua\n"
             .. tostring(moduleFunction)
@@ -100,22 +106,29 @@ local function LoadModule(moduleName)
 
     end
 
+    if not moduleFunction then
+
+        error(
+            "[Main] loadstring returned nil for "
+            .. moduleName
+            .. ".lua"
+        )
+
+    end
 
     local runSuccess, result =
         pcall(moduleFunction)
 
-
     if not runSuccess then
 
         error(
-            "[Main] Failed to run "
+            "[Main] Runtime error in "
             .. moduleName
             .. ".lua\n"
             .. tostring(result)
         )
 
     end
-
 
     if result == nil then
 
@@ -127,20 +140,12 @@ local function LoadModule(moduleName)
 
     end
 
-
     Modules[moduleName] = result
 
-
-    print(
-        "[Main] Loaded: "
-        .. moduleName
-    )
-
+    print("[Main] Loaded:", moduleName)
 
     return result
-
 end
-
 
 --// =========================================================
 --// STARTUP
