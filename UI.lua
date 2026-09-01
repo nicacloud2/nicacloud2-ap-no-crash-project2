@@ -750,8 +750,8 @@ function UI:Start()
     )
 
 
-  --// Enable polling immediately.
-  --// Avoid task.wait() during UI startup.
+  --// Do not use task.wait() during UI startup.
+  --// Matcha can block here.
 
     self.SettingsReady =
         true
