@@ -1,3 +1,4 @@
+```lua
 --// =========================================================
 --// GAKURAN - HEALTH OVERLAY
 --// GitHub / Matcha Version
@@ -139,6 +140,10 @@ function HealthOverlay:GetScreenPosition(position)
 end
 
 
+--// =========================================================
+--// UPDATE PLAYER
+--// =========================================================
+
 function HealthOverlay:UpdatePlayer(player)
 
     local object = self.Objects[player]
@@ -178,7 +183,11 @@ function HealthOverlay:UpdatePlayer(player)
     end
 
 
+    --// =====================================================
     --// MATCHA PROJECTION
+    --// IMPORTANT:
+    --// DO NOT USE Camera:WorldToViewportPoint()
+    --// =====================================================
 
     local screenPosition, onScreen =
         self:GetScreenPosition(root.Position)
@@ -189,7 +198,9 @@ function HealthOverlay:UpdatePlayer(player)
     end
 
 
+    --// =====================================================
     --// HEALTH PERCENTAGE
+    --// =====================================================
 
     local percentage =
         math.clamp(
@@ -199,7 +210,9 @@ function HealthOverlay:UpdatePlayer(player)
         )
 
 
+    --// =====================================================
     --// DISTANCE
+    --// =====================================================
 
     local distance = 50
 
@@ -223,7 +236,9 @@ function HealthOverlay:UpdatePlayer(player)
     end
 
 
+    --// =====================================================
     --// SIZE
+    --// =====================================================
 
     local height =
         math.clamp(
@@ -244,7 +259,9 @@ function HealthOverlay:UpdatePlayer(player)
         height * percentage
 
 
+    --// =====================================================
     --// HEALTH BAR
+    --// =====================================================
 
     object.HealthBar.Position =
         Vector2.new(
@@ -261,7 +278,9 @@ function HealthOverlay:UpdatePlayer(player)
     object.HealthBar.Visible = true
 
 
+    --// =====================================================
     --// HEALTH TEXT
+    --// =====================================================
 
     object.Text.Position =
         Vector2.new(
@@ -279,6 +298,10 @@ function HealthOverlay:UpdatePlayer(player)
     object.Text.Visible = true
 end
 
+
+--// =========================================================
+--// REFRESH
+--// =========================================================
 
 function HealthOverlay:Refresh()
 
@@ -315,6 +338,10 @@ function HealthOverlay:Refresh()
 end
 
 
+--// =========================================================
+--// POLL
+--// =========================================================
+
 function HealthOverlay:Poll()
 
     if not self.State.Running then
@@ -330,6 +357,10 @@ function HealthOverlay:Poll()
     end)
 end
 
+
+--// =========================================================
+--// ENABLE / DISABLE
+--// =========================================================
 
 function HealthOverlay:SetEnabled(enabled)
 
@@ -351,6 +382,10 @@ function HealthOverlay:IsEnabled()
 end
 
 
+--// =========================================================
+--// START
+--// =========================================================
+
 function HealthOverlay:Start()
 
     if self.State.Running then
@@ -367,6 +402,8 @@ function HealthOverlay:Start()
 
         return
     end
+
+    --// Matcha projection check
 
     if type(WorldToScreen) ~= "function" then
 
@@ -400,6 +437,10 @@ function HealthOverlay:Start()
 end
 
 
+--// =========================================================
+--// STOP
+--// =========================================================
+
 function HealthOverlay:Stop()
 
     if not self.State.Running then
@@ -416,10 +457,19 @@ function HealthOverlay:Stop()
 end
 
 
+--// =========================================================
+--// DESTROY
+--// =========================================================
+
 function HealthOverlay:Destroy()
 
     self:Stop()
 end
 
 
+--// =========================================================
+--// MATCHA MODULE RESULT
+--// =========================================================
+
 _G.__GakuranModuleResult = HealthOverlay
+```
