@@ -1,21 +1,27 @@
---// Gakuran Modular Project
---// ParryController.lua
+--// =========================================================
+--// GAKURAN - PARRY CONTROLLER
+--// GitHub / Matcha Version
+--// =========================================================
 
 local Players = game:GetService("Players")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 
-local Config = require(script.Parent.Config)
-local AnimationDatabase = require(script.Parent.AnimationDatabase)
-local AnimationTracker = require(script.Parent.AnimationTracker)
-local TargetManager = require(script.Parent.TargetManager)
-
 local ParryController = {}
 
---==================================================
--- STATE
---==================================================
+--// Dependencies are injected by Main.lua
+local Config = nil
+local AnimationDatabase = nil
+local AnimationTracker = nil
+local TargetManager = nil
 
-ParryController.State = nil
+
+--// =========================================================
+--// STATE
+--// =========================================================
+
+ParryController.State = {
+    Running = false
+}
 
 ParryController.IsBlocking = false
 ParryController.IsDodging = false
@@ -28,30 +34,42 @@ ParryController.FailedParries = 0
 
 ParryController.AnimationListener = nil
 
---==================================================
--- INITIALIZE
---==================================================
 
-function ParryController:Initialize(State)
+--// =========================================================
+--// DEPENDENCIES
+--// =========================================================
 
-    self.State = State
+function ParryController:SetDependencies(
+    config,
+    animationDatabase,
+    animationTracker,
+    targetManager
+)
 
-    self.IsBlocking = false
-    self.IsDodging = false
-
-    self.LastParryTime = 0
-    self.LastBlockTime = 0
-
-    self.ParryCount = 0
-    self.FailedParries = 0
-
-    self.AnimationListener = nil
+    Config = config
+    AnimationDatabase = animationDatabase
+    AnimationTracker = animationTracker
+    TargetManager = targetManager
 
 end
 
---==================================================
--- CHARACTER
---==================================================
+
+--// =========================================================
+--// INITIALIZE
+--// =========================================================
+
+function ParryController:Initialize(state)
+
+    self.SharedState = state
+
+    print("[ParryController] Initialized.")
+
+end
+
+
+--// =========================================================
+--// CHARACTER
+--// =========================================================
 
 function ParryController:GetCharacter()
 
@@ -65,6 +83,7 @@ function ParryController:GetCharacter()
 
 end
 
+
 function ParryController:GetHumanoid()
 
     local character = self:GetCharacter()
@@ -77,9 +96,10 @@ function ParryController:GetHumanoid()
 
 end
 
---==================================================
--- BLOCK
---==================================================
+
+--// =========================================================
+--// BLOCK
+--// =========================================================
 
 function ParryController:BlockStart(timestamp, duration)
 
@@ -87,39 +107,48 @@ function ParryController:BlockStart(timestamp, duration)
         return
     end
 
-    local humanoid = self:GetHumanoid()
-
-    if not humanoid or humanoid.Health <= 0 then
+    if not self.State.Running then
         return
     end
 
+
     self.IsBlocking = true
-    self.LastBlockTime = timestamp or os.clock()
+    self.LastBlockTime = os.clock()
 
-    VirtualInputManager:SendKeyEvent(
-        true,
-        Enum.KeyCode.F,
-        false,
-        game
-    )
 
-    if duration then
+    --// Press F
 
-        task.delay(duration, function()
+    pcall(function()
 
-            if self.IsBlocking then
-                self:BlockEnd()
-            end
+        VirtualInputManager:SendKeyEvent(
+            true,
+            Enum.KeyCode.F,
+            false,
+            game
+        )
 
-        end)
+    end)
 
-    end
+
+    local holdTime =
+        duration
+        or (
+            Config
+            and Config.BlockHoldTime
+        )
+        or 0.27
+
+
+    task.delay(holdTime, function()
+
+        if self.IsBlocking then
+            self:BlockEnd()
+        end
+
+    end)
 
 end
 
---==================================================
--- BLOCK END
---==================================================
 
 function ParryController:BlockEnd()
 
@@ -127,20 +156,27 @@ function ParryController:BlockEnd()
         return
     end
 
+
     self.IsBlocking = false
 
-    VirtualInputManager:SendKeyEvent(
-        false,
-        Enum.KeyCode.F,
-        false,
-        game
-    )
+
+    pcall(function()
+
+        VirtualInputManager:SendKeyEvent(
+            false,
+            Enum.KeyCode.F,
+            false,
+            game
+        )
+
+    end)
 
 end
 
---==================================================
--- DODGE
---==================================================
+
+--// =========================================================
+--// DODGE
+--// =========================================================
 
 function ParryController:Dodge()
 
@@ -148,136 +184,284 @@ function ParryController:Dodge()
         return
     end
 
-    local humanoid = self:GetHumanoid()
-
-    if not humanoid or humanoid.Health <= 0 then
+    if not self.State.Running then
         return
     end
 
+
     self.IsDodging = true
 
-    VirtualInputManager:SendKeyEvent(
-        true,
-        Enum.KeyCode.X,
-        false,
-        game
-    )
+
+    pcall(function()
+
+        VirtualInputManager:SendKeyEvent(
+            true,
+            Enum.KeyCode.X,
+            false,
+            game
+        )
+
+    end)
+
 
     task.wait(0.05)
 
-    VirtualInputManager:SendKeyEvent(
-        false,
-        Enum.KeyCode.X,
-        false,
-        game
-    )
+
+    pcall(function()
+
+        VirtualInputManager:SendKeyEvent(
+            false,
+            Enum.KeyCode.X,
+            false,
+            game
+        )
+
+    end)
+
 
     self.IsDodging = false
 
 end
 
---==================================================
--- SETTINGS
---==================================================
+
+--// =========================================================
+--// REACTION TIME
+--// =========================================================
 
 function ParryController:GetReactionTime(animationData)
 
     if not animationData then
-        return Config.DefaultReactionTime
+
+        return (
+            Config
+            and Config.DefaultReactionTime
+        )
+        or 0.1
+
     end
 
-    return animationData.ReactionTime
-        or animationData.DefaultReactionTime
-        or Config.DefaultReactionTime
+
+    if animationData.ReactionTime then
+        return animationData.ReactionTime
+    end
+
+
+    if animationData.DefaultReactionTime then
+        return animationData.DefaultReactionTime
+    end
+
+
+    if AnimationDatabase
+        and animationData.AnimationId then
+
+        return AnimationDatabase:GetReactionTime(
+            animationData.AnimationId
+        )
+
+    end
+
+
+    return (
+        Config
+        and Config.DefaultReactionTime
+    )
+    or 0.1
 
 end
+
+
+--// =========================================================
+--// PARRY WINDOW
+--// =========================================================
 
 function ParryController:GetParryWindow()
 
-    return Config.ParryWindow
+    return (
+        Config
+        and Config.Parry
+        and Config.Parry.Window
+    )
+    or 0.2
 
 end
+
 
 function ParryController:GetParryOffset()
 
-    return Config.ParryOffset
+    return (
+        Config
+        and Config.Parry
+        and Config.Parry.Offset
+    )
+    or 0
 
 end
+
 
 function ParryController:GetBlockHoldTime()
 
-    return Config.BlockHoldTime
+    return (
+        Config
+        and Config.Parry
+        and Config.Parry.BlockHoldTime
+    )
+    or 0.27
 
 end
 
---==================================================
--- PARry TIME
---==================================================
+
+--// =========================================================
+--// PARRY TIME
+--// =========================================================
 
 function ParryController:GetParryTime(animationData)
 
-    local reactionTime = self:GetReactionTime(animationData)
+    local reactionTime =
+        self:GetReactionTime(animationData)
 
-    local offset = self:GetParryOffset()
+    local parryWindow =
+        self:GetParryWindow()
 
-    return math.max(
-        0,
-        reactionTime + offset
-    )
+    local offset =
+        self:GetParryOffset()
+
+
+    return reactionTime
+        - (parryWindow / 2)
+        + offset
 
 end
 
---==================================================
--- CAN PARRY
---==================================================
+
+--// =========================================================
+--// DISTANCE
+--// =========================================================
+
+function ParryController:GetDistance(character)
+
+    local localCharacter =
+        self:GetCharacter()
+
+    if not localCharacter or not character then
+        return math.huge
+    end
+
+
+    local localRoot =
+        localCharacter:FindFirstChild("HumanoidRootPart")
+
+    local targetRoot =
+        character:FindFirstChild("HumanoidRootPart")
+
+
+    if not localRoot or not targetRoot then
+        return math.huge
+    end
+
+
+    return (
+        localRoot.Position
+        - targetRoot.Position
+    ).Magnitude
+
+end
+
+
+--// =========================================================
+--// CAN PARRY
+--// =========================================================
 
 function ParryController:CanParry(animationData)
+
+    if not self.State.Running then
+        return false
+    end
+
+
+    if Config
+        and Config.Parry
+        and Config.Parry.Enabled == false then
+
+        return false
+
+    end
+
 
     if not animationData then
         return false
     end
 
-    if not Config.Parry.Enabled then
+
+    local localPlayer =
+        Players.LocalPlayer
+
+
+    if animationData.Player
+        and animationData.Player == localPlayer then
+
         return false
+
     end
 
-    local character = animationData.Character
+
+    local character =
+        animationData.Character
+
 
     if not character then
         return false
     end
 
-    local humanoid = character:FindFirstChildOfClass("Humanoid")
 
-    if not humanoid or humanoid.Health <= 0 then
+    local humanoid =
+        character:FindFirstChildOfClass("Humanoid")
+
+
+    if not humanoid
+        or humanoid.Health <= 0 then
+
         return false
+
     end
 
-    local localHumanoid = self:GetHumanoid()
 
-    if not localHumanoid or localHumanoid.Health <= 0 then
+    local localHumanoid =
+        self:GetHumanoid()
+
+
+    if not localHumanoid
+        or localHumanoid.Health <= 0 then
+
         return false
+
     end
 
-    -- Don't react to our own animations
-    if character == self:GetCharacter() then
+
+    local maxDistance =
+        (
+            Config
+            and Config.Parry
+            and Config.Parry.MaxDistance
+        )
+        or 10
+
+
+    if self:GetDistance(character)
+        > maxDistance then
+
         return false
+
     end
 
-    -- Target distance check
-    local distance = TargetManager:GetDistance(character)
-
-    if distance and distance > Config.Parry.MaxDistance then
-        return false
-    end
 
     return true
 
 end
 
---==================================================
--- PARry
---==================================================
+
+--// =========================================================
+--// PARRY
+--// =========================================================
 
 function ParryController:Parry(animationData)
 
@@ -285,24 +469,28 @@ function ParryController:Parry(animationData)
         return false
     end
 
+
     local now = os.clock()
 
-    if now - self.LastParryTime < self:GetParryWindow() then
-        return false
-    end
 
     self.LastParryTime = now
     self.ParryCount += 1
 
-    self:BlockStart(now, self:GetBlockHoldTime())
+
+    self:BlockStart(
+        now,
+        self:GetBlockHoldTime()
+    )
+
 
     return true
 
 end
 
---==================================================
--- PROCESS ANIMATION
---==================================================
+
+--// =========================================================
+--// PROCESS ANIMATION
+--// =========================================================
 
 function ParryController:ProcessAnimation(animationData)
 
@@ -310,110 +498,66 @@ function ParryController:ProcessAnimation(animationData)
         return
     end
 
-    local animationId = animationData.AnimationId
 
-    if not animationId then
+    if not animationData.DatabaseData then
         return
     end
 
-    --==============================================
-    -- OUR CHARACTER
-    --==============================================
-
-    if animationData.Character == self:GetCharacter() then
-        return
-    end
-
-    --==============================================
-    -- PARRIED / STUNNED / FAILED STATES
-    --==============================================
-
-    if AnimationTracker:IsParriedAnimation(animationId) then
-        return
-    end
-
-    if AnimationTracker:IsStunnedAnimation(animationId) then
-        return
-    end
-
-    if AnimationTracker:IsParryFailedAnimation(animationId) then
-
-        self.FailedParries += 1
-
-        return
-
-    end
-
-    --==============================================
-    -- ENEMY PARRYING
-    --==============================================
-
-    if AnimationTracker:IsParryingAnimation(animationId) then
-        return
-    end
-
-    --==============================================
-    -- ATTACK
-    --==============================================
-
-    self:EvaluateAttack(animationData)
-
-end
-
---==================================================
--- EVALUATE ATTACK
---==================================================
-
-function ParryController:EvaluateAttack(animationData)
 
     if not self:CanParry(animationData) then
         return
     end
 
+
     local databaseData =
-        AnimationDatabase:Get(animationData.AnimationId)
+        animationData.DatabaseData
 
-    if not databaseData then
-        return
-    end
 
-    --==============================================
-    -- SPECIAL PARRY FUNCTION
-    --==============================================
+    --// Custom parry callback
 
     if databaseData.ParryFunction then
 
-        local success, err = pcall(function()
+        local success, err =
+            pcall(function()
 
-            databaseData.ParryFunction(animationData)
+                databaseData.ParryFunction(
+                    animationData
+                )
 
-        end)
+            end)
+
 
         if not success then
 
             warn(
-                "[ParryController] ParryFunction error:",
+                "[ParryController] " ..
+                "ParryFunction error:",
                 err
             )
 
         end
 
+
         return
 
     end
 
-    --==============================================
-    -- NORMAL PARRY
-    --==============================================
 
-    local parryDelay =
+    local parryTime =
         self:GetParryTime(animationData)
 
-    task.delay(parryDelay, function()
 
-        if not self.State or not self.State.Running then
+    if parryTime < 0 then
+        parryTime = 0
+    end
+
+
+    task.delay(parryTime, function()
+
+        if not self.State.Running then
             return
         end
+
 
         self:Parry(animationData)
 
@@ -421,21 +565,52 @@ function ParryController:EvaluateAttack(animationData)
 
 end
 
---==================================================
--- ANIMATION TRACKER CONNECTION
---==================================================
+
+--// =========================================================
+--// EVALUATE ATTACK
+--// =========================================================
+
+function ParryController:EvaluateAttack(animationData)
+
+    if not animationData then
+        return false
+    end
+
+
+    if not animationData.DatabaseData then
+        return false
+    end
+
+
+    return self:CanParry(animationData)
+
+end
+
+
+--// =========================================================
+--// CONNECT TRACKER
+--// =========================================================
 
 function ParryController:ConnectAnimationTracker()
+
+    if not AnimationTracker then
+        warn("[ParryController] AnimationTracker missing.")
+        return
+    end
+
 
     if self.AnimationListener then
         return
     end
 
-    self.AnimationListener = function(animationData)
 
-        self:ProcessAnimation(animationData)
+    self.AnimationListener =
+        function(animationData)
 
-    end
+            self:ProcessAnimation(animationData)
+
+        end
+
 
     AnimationTracker:AddListener(
         self.AnimationListener
@@ -443,59 +618,87 @@ function ParryController:ConnectAnimationTracker()
 
 end
 
---==================================================
--- DISCONNECT
---==================================================
+
+--// =========================================================
+--// DISCONNECT TRACKER
+--// =========================================================
 
 function ParryController:DisconnectAnimationTracker()
+
+    if not AnimationTracker then
+        return
+    end
+
 
     if not self.AnimationListener then
         return
     end
 
+
     AnimationTracker:RemoveListener(
         self.AnimationListener
     )
+
 
     self.AnimationListener = nil
 
 end
 
---==================================================
--- START
---==================================================
+
+--// =========================================================
+--// START
+--// =========================================================
 
 function ParryController:Start()
 
-    if not Config.Parry.Enabled then
+    if self.State.Running then
         return
     end
 
+
+    self.State.Running = true
+
+
     self:ConnectAnimationTracker()
+
+
+    print("[ParryController] Started.")
 
 end
 
---==================================================
--- STOP
---==================================================
+
+--// =========================================================
+--// STOP
+--// =========================================================
 
 function ParryController:Stop()
+
+    if not self.State.Running then
+        return
+    end
+
+
+    self.State.Running = false
+
 
     self:DisconnectAnimationTracker()
 
     self:BlockEnd()
 
+
     self.IsDodging = false
+
+
+    print("[ParryController] Stopped.")
 
 end
 
---==================================================
--- RESET
---==================================================
+
+--// =========================================================
+--// RESET
+--// =========================================================
 
 function ParryController:Reset()
-
-    self:Stop()
 
     self.LastParryTime = 0
     self.LastBlockTime = 0
@@ -507,5 +710,10 @@ function ParryController:Reset()
     self.IsDodging = false
 
 end
+
+
+--// =========================================================
+--// RETURN
+--// =========================================================
 
 return ParryController
