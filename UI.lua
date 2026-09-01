@@ -750,8 +750,8 @@ function UI:Start()
     )
 
 
-    --// Give Matcha's UI binding a moment to initialize.
-    task.wait(0.15)
+  --// Enable polling immediately.
+  --// Avoid task.wait() during UI startup.
 
     self.SettingsReady =
         true
